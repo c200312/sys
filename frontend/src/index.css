@@ -2172,3 +2172,20 @@ html {
     transform: rotate(360deg);
   }
 }
+
+/* PPT Agent 特定样式 */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.ppt-film-dragging {
+  opacity: 0.5;
+  border: 2px dashed #666;
+  transform: scale(0.95);
+}
+

@@ -7,7 +7,10 @@
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNTFiMzk4ZC0zZmY0LTQ3MzgtYmUwYS1iNGQ1ZGQwOTZlMTYiLCJ1c2VybmFtZSI6InRlYWNoZXIxIiwicm9sZSI6InRlYWNoZXIiLCJleHAiOjE3NjY4OTYwODZ9.uWK39zxjAkLaAMhP2AqHu9aJHo8ycVbp1pZwhk0K51g\")",
       "Bash(python -m json.tool:*)",
       "Bash(python:*)",
-      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMWZhMDIyMS01M2E3LTQ5ZTYtYTRkOS1kZDgwZjkxMDJjMGYiLCJ1c2VybmFtZSI6InN0dWRlbnQxIiwicm9sZSI6InN0dWRlbnQiLCJleHAiOjE3NjY4OTk3MDZ9.CtngwpRlYS0UGQPf6yddz-xS623DTpsu00jeY4EYtac\")"
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMWZhMDIyMS01M2E3LTQ5ZTYtYTRkOS1kZDgwZjkxMDJjMGYiLCJ1c2VybmFtZSI6InN0dWRlbnQxIiwicm9sZSI6InN0dWRlbnQiLCJleHAiOjE3NjY4OTk3MDZ9.CtngwpRlYS0UGQPf6yddz-xS623DTpsu00jeY4EYtac\")",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

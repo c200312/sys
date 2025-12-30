@@ -32,6 +32,18 @@ class Settings(BaseSettings):
     ai_api_key: str = ""
     ai_model: str = ""
 
+    # AI PPT 生成配置
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_api_key: str = ""
+    aippt_port: int = 8002
+    ai_ppt_model: str = ""
+
+    # AI 写作服务配置
+    aiwriting_port: int = 8003
+    openai_api_key: str = ""
+    openai_base_url: str = "https://api.openai.com/v1"
+    aiwriting_model: str = "gpt-4o"
+
     @property
     def cors_origins_list(self) -> List[str]:
         """将逗号分隔的 CORS origins 转为列表"""

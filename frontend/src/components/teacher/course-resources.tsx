@@ -254,38 +254,37 @@ export function CourseResources({ courseId }: CourseResourcesProps) {
     if (!aiPPTFolder) return;
 
     try {
-      // 将内容转换为 base64
-      const blob = new Blob([content], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
-      const reader = new FileReader();
+      // content 已经是 base64 格式的数据（可能是图片或 PPTX）
+      // 计算 base64 数据的大致大小
+      const base64Data = content.split(',')[1] || content;
+      const size = Math.ceil(base64Data.length * 0.75);
 
-      reader.onload = async () => {
-        const base64Content = reader.result as string;
-        const result = await api.uploadFile(aiPPTFolder, {
-          name: fileName,
-          size: blob.size,
-          type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-          content: base64Content,
-        });
-        if (result.success) {
-          toast.success('课件已保存');
-          loadResources();
+      // 根据文件名判断类型
+      const isPptx = fileName.toLowerCase().endsWith('.pptx');
+      const mimeType = isPptx
+        ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        : 'image/png';
 
-          // 自动展开该文件夹
-          const newExpanded = new Set(expandedFolders);
-          newExpanded.add(aiPPTFolder);
-          setExpandedFolders(newExpanded);
+      const result = await api.uploadFile(aiPPTFolder, {
+        name: fileName,
+        size: size,
+        type: mimeType,
+        content: content,
+      });
 
-          setAIPPTFolder(null);
-        } else {
-          toast.error(result.error || '保存失败');
-        }
-      };
+      if (result.success) {
+        toast.success('课件已保存');
+        loadResources();
 
-      reader.onerror = () => {
-        toast.error('保存失败');
-      };
+        // 自动展开该文件夹
+        const newExpanded = new Set(expandedFolders);
+        newExpanded.add(aiPPTFolder);
+        setExpandedFolders(newExpanded);
 
-      reader.readAsDataURL(blob);
+        setAIPPTFolder(null);
+      } else {
+        toast.error(result.error || '保存失败');
+      }
     } catch (error: any) {
       toast.error(error.message || '保存失败');
     }

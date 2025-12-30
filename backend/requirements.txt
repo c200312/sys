@@ -1,9 +1,9 @@
-# FastAPI 核心
+# ============= FastAPI 核心 =============
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 python-multipart==0.0.6
 
-# 数据库
+# ============= 数据库 =============
 sqlmodel==0.0.14
 sqlalchemy==2.0.25
 aiosqlite==0.19.0
@@ -11,17 +11,32 @@ asyncpg==0.29.0  # PostgreSQL 异步驱动
 pymysql==1.1.0   # MySQL 驱动
 cryptography==41.0.7  # MySQL SSL 支持
 
-# 认证
+# ============= 认证 =============
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.1.2
 
-# 工具
+# ============= 工具 =============
 pydantic[email]==2.5.3
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
 
-# 开发工具
+# ============= 开发工具 =============
 httpx==0.26.0
 pytest==7.4.4
 pytest-asyncio==0.23.3
+
+# ============= AI PPT 生成服务 =============
+openai
+aiohttp
+python-pptx
+Pillow
+
+# ============= AI 写作服务 =============
+langchain
+langchain-openai
+langchain-community
+pypdf
+python-docx
+markdown
+unstructured

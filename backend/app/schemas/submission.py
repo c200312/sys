@@ -4,23 +4,34 @@
 from datetime import datetime
 from typing import Optional, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from app.schemas.homework import FileAttachment
+from app.schemas.homework import FileAttachment, FileAttachmentUpload, ExistingAttachment
 
 
 # ============= 请求 Schema =============
 
 class SubmissionCreateRequest(BaseModel):
-    """提交作业请求"""
-    content: str = Field(..., min_length=1)
-    attachments: Optional[List[FileAttachment]] = None
+    """提交作业请求（文本或附件至少有一个）"""
+    content: Optional[str] = None
+    attachments: Optional[List[FileAttachmentUpload]] = None  # 新上传的附件
+    existing_attachments: Optional[List[ExistingAttachment]] = None  # 保留的历史附件
+
+    @model_validator(mode='after')
+    def check_content_or_attachments(self):
+        """验证文本或附件至少有一个"""
+        has_content = self.content and self.content.strip()
+        has_new_attachments = self.attachments and len(self.attachments) > 0
+        has_existing_attachments = self.existing_attachments and len(self.existing_attachments) > 0
+        if not has_content and not has_new_attachments and not has_existing_attachments:
+            raise ValueError('请填写作业内容或上传附件')
+        return self
 
 
 class SubmissionUpdateRequest(BaseModel):
     """更新提交请求"""
     content: Optional[str] = None
-    attachments: Optional[List[FileAttachment]] = None
+    attachments: Optional[List[FileAttachmentUpload]] = None
 
 
 class GradeRequest(BaseModel):
@@ -36,7 +47,7 @@ class SubmissionResponse(BaseModel):
     id: str
     homework_id: str
     student_id: str
-    content: str
+    content: Optional[str] = None
     attachments: Optional[List[FileAttachment]] = None
     score: Optional[int] = None
     feedback: Optional[str] = None
@@ -71,7 +82,8 @@ class StudentSubmission(BaseModel):
     homework_id: str
     homework_title: str
     course_name: str
-    content: str
+    content: Optional[str] = None
+    attachments: Optional[List[FileAttachment]] = None  # 附件列表
     score: Optional[int] = None
     feedback: Optional[str] = None
     submitted_at: datetime

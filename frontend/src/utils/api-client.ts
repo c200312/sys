@@ -62,10 +62,34 @@ export interface FileAttachment {
   name: string;
   type: string;
   size: number;
-  content: string;
+  object_name: string;
+  url?: string;
+}
+
+export interface FileAttachmentUpload {
+  name: string;
+  type: string;
+  size: number;
+  content: string;  // Base64 编码
+}
+
+export interface ExistingAttachment {
+  name: string;
+  type: string;
+  size: number;
+  object_name: string;  // MinIO 对象名称
 }
 
 export interface GradingCriteria {
+  type: 'text' | 'file';
+  content: string;
+  file_name?: string;
+  file_size?: number;
+  object_name?: string;
+  url?: string;
+}
+
+export interface GradingCriteriaUpload {
   type: 'text' | 'file';
   content: string;
   file_name?: string;
@@ -118,7 +142,8 @@ export interface CourseFile {
   name: string;
   size: number;
   type: string;
-  content?: string;
+  object_name?: string;
+  url?: string;
   created_at: string;
 }
 
@@ -431,7 +456,11 @@ class ApiClient {
     return this.request<Submission>(`/api/submissions/${submissionId}`);
   }
 
-  async submitHomework(homeworkId: string, data: { content: string; attachments?: FileAttachment[] }) {
+  async submitHomework(homeworkId: string, data: {
+    content?: string;
+    attachments?: FileAttachmentUpload[];
+    existing_attachments?: ExistingAttachment[];
+  }) {
     return this.request<Submission>(`/api/homeworks/${homeworkId}/submissions`, {
       method: 'POST',
       body: JSON.stringify(data),

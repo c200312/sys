@@ -12,7 +12,7 @@ import sys
 import subprocess
 import signal
 import time
-import atexit
+import threading
 from dotenv import load_dotenv
 
 # 加载环境变量
@@ -44,83 +44,96 @@ SERVICES = [
 ]
 
 processes = []
+stopping = False
+stop_lock = threading.Lock()
 
 
 def start_service(service):
-    """启动单个服务"""
+    """启动单个服务（带热重载）"""
+    # 确定需要监听的目录
+    reload_dirs = []
+    module_name = service["module"].split(":")[0].split(".")[0]
+    reload_dir = os.path.join(service["cwd"], module_name)
+    if os.path.isdir(reload_dir):
+        reload_dirs = ["--reload-dir", reload_dir]
+
     cmd = [
         sys.executable, "-m", "uvicorn",
         service["module"],
         "--host", "0.0.0.0",
         "--port", str(service["port"]),
         "--reload",
+        *reload_dirs,
     ]
 
-    print(f"🚀 Starting {service['name']} on http://localhost:{service['port']}")
+    print(f"  Starting {service['name']} on http://localhost:{service['port']}")
 
+    # 在 Windows 上，不使用 CREATE_NEW_PROCESS_GROUP 以避免信号传播问题
     process = subprocess.Popen(
         cmd,
         cwd=service["cwd"],
-        # 在 Windows 上需要特殊处理
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+        stdout=None,  # 继承父进程的输出
+        stderr=None,
     )
     return process
 
 
 def kill_process_tree(pid):
-    """在 Windows 上杀死进程树（包括所有子进程）"""
+    """杀死进程树"""
     if sys.platform == "win32":
-        # 使用 taskkill 命令强制杀死进程树
-        subprocess.run(
-            ["taskkill", "/F", "/T", "/PID", str(pid)],
-            capture_output=True,
-            check=False
-        )
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                capture_output=True,
+                check=False,
+                timeout=5
+            )
+        except Exception:
+            pass
     else:
-        os.killpg(os.getpgid(pid), signal.SIGTERM)
+        try:
+            os.killpg(os.getpgid(pid), signal.SIGTERM)
+        except Exception:
+            pass
 
 
 def stop_all():
     """停止所有服务"""
-    print("\n🛑 Stopping all services...")
+    global stopping
+
+    with stop_lock:
+        if stopping:
+            return
+        stopping = True
+
+    print("\nStopping all services...")
+
     for proc in processes:
-        if proc.poll() is None:  # 进程仍在运行
+        if proc and proc.poll() is None:
             try:
                 kill_process_tree(proc.pid)
-            except Exception as e:
-                print(f"Warning: Failed to kill process {proc.pid}: {e}")
-
-    # 等待进程结束
-    for proc in processes:
-        try:
-            proc.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            try:
-                proc.kill()
             except Exception:
                 pass
 
-    print("✅ All services stopped")
+    # 等待进程结束
+    for proc in processes:
+        if proc:
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
 
-
-def signal_handler(signum, frame):
-    """处理终止信号"""
-    stop_all()
-    sys.exit(0)
+    print("All services stopped")
 
 
 def main():
-    # 注册信号处理
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    if sys.platform != "win32":
-        signal.signal(signal.SIGQUIT, signal_handler)
-
-    # 注册退出时的清理函数
-    atexit.register(stop_all)
+    global stopping
 
     print("=" * 60)
-    print("📦 Education System - All Services Launcher")
+    print("Education System - All Services Launcher")
     print("=" * 60)
     print()
 
@@ -128,33 +141,43 @@ def main():
     for service in SERVICES:
         proc = start_service(service)
         processes.append(proc)
-        time.sleep(0.5)  # 稍微延迟，避免端口冲突
+        time.sleep(0.5)
 
     print()
     print("=" * 60)
-    print("✅ All services started with hot-reload enabled")
+    print("All services started with hot-reload enabled")
     print()
     print("Services:")
     for service in SERVICES:
-        print(f"   • {service['name']}: http://localhost:{service['port']}")
+        print(f"   {service['name']}: http://localhost:{service['port']}")
     print()
+    print("Hot-reload is active - changes will auto-reload")
     print("Press Ctrl+C to stop all services")
     print("=" * 60)
 
-    # 监控进程状态
+    # 主循环 - 只监控进程，不重启
     try:
-        while True:
-            # 检查是否有进程意外退出
+        while not stopping:
+            all_running = True
             for i, proc in enumerate(processes):
                 if proc.poll() is not None:
-                    service = SERVICES[i]
-                    print(f"⚠️  {service['name']} exited with code {proc.returncode}")
-                    # 尝试重启
-                    print(f"🔄 Restarting {service['name']}...")
-                    processes[i] = start_service(service)
+                    # 进程退出了，检查是否是热重载导致的
+                    # uvicorn 热重载会重启子进程，但父进程不会退出
+                    all_running = False
 
-            time.sleep(2)
+            if not all_running and not stopping:
+                # 有进程退出，等待一下看是否是热重载
+                time.sleep(1)
+                # 检查是否所有进程都退出了
+                all_exited = all(p.poll() is not None for p in processes)
+                if all_exited:
+                    print("All processes exited")
+                    break
+
+            time.sleep(1)
     except KeyboardInterrupt:
+        pass
+    finally:
         stop_all()
 
 

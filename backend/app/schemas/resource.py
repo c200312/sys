@@ -20,17 +20,16 @@ class FolderUpdateRequest(BaseModel):
 
 
 class FileUploadRequest(BaseModel):
-    """上传文件请求"""
+    """上传文件请求（用于 JSON 方式上传，已弃用）"""
     name: str = Field(..., min_length=1, max_length=255)
     size: int = Field(..., ge=0)
     type: str = Field(..., min_length=1, max_length=100)
-    content: str = Field(..., min_length=1)  # Base64 编码
+    content: str = Field(..., min_length=1)  # Base64 编码（兼容旧接口）
 
 
 class FileUpdateRequest(BaseModel):
     """更新文件请求"""
     name: Optional[str] = Field(None, min_length=1, max_length=255)
-    content: Optional[str] = None  # Base64 编码
 
 
 # ============= 响应 Schema =============
@@ -43,12 +42,13 @@ class FileResponse(BaseModel):
     name: str
     size: int
     type: str
-    content: str  # Base64 编码
+    object_name: str  # MinIO 对象名称
+    url: Optional[str] = None  # 下载 URL（预签名）
     created_at: datetime
 
 
 class FileWithoutContent(BaseModel):
-    """文件响应（不含内容）"""
+    """文件响应（不含内容，用于列表展示）"""
     id: str
     folder_id: str
     course_id: str

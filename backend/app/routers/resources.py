@@ -4,7 +4,6 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlmodel.ext.asyncio.session import AsyncSession
-import base64
 
 from app.core import DbSession, CurrentUserId
 from app.core.exceptions import AppException
@@ -245,20 +244,13 @@ async def download_file(
     """
     try:
         service = ResourceService(db)
-        file = await service.download_file(file_id)
-
-        # 解码 Base64 内容
-        try:
-            content = base64.b64decode(file.content)
-        except Exception:
-            # 如果不是有效的 Base64，直接返回原始内容
-            content = file.content.encode()
+        content, filename, content_type = await service.download_file(file_id)
 
         return Response(
             content=content,
-            media_type=file.type,
+            media_type=content_type,
             headers={
-                "Content-Disposition": f'attachment; filename="{file.name}"'
+                "Content-Disposition": f'attachment; filename="{filename}"'
             }
         )
     except AppException as e:

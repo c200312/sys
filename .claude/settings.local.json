@@ -10,7 +10,8 @@
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMWZhMDIyMS01M2E3LTQ5ZTYtYTRkOS1kZDgwZjkxMDJjMGYiLCJ1c2VybmFtZSI6InN0dWRlbnQxIiwicm9sZSI6InN0dWRlbnQiLCJleHAiOjE3NjY4OTk3MDZ9.CtngwpRlYS0UGQPf6yddz-xS623DTpsu00jeY4EYtac\")",
       "Bash(find:*)",
       "Bash(tree:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(cat:*)"
     ]
   }
 }

@@ -1,8 +1,10 @@
 """
 课程资源 Service（文件夹和文件）
 """
-from typing import Optional, List
+import base64
+from typing import Optional, Tuple
 
+from fastapi import UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.exceptions import NotFoundError, ConflictError
@@ -25,6 +27,7 @@ from app.schemas import (
     FileListResponse,
     CourseResourcesResponse,
 )
+from app.services.minio_service import get_minio_service
 
 
 class ResourceService:
@@ -35,6 +38,7 @@ class ResourceService:
         self.folder_repo = FolderRepository(session)
         self.file_repo = FileRepository(session)
         self.course_repo = CourseRepository(session)
+        self.minio = get_minio_service()
 
     # ============= 文件夹操作 =============
 
@@ -168,7 +172,15 @@ class ResourceService:
         if not folder:
             raise NotFoundError("文件夹不存在")
 
-        # 删除文件夹内的所有文件
+        # 获取文件夹内的所有文件，删除 MinIO 中的对象
+        files = await self.file_repo.get_by_folder_id(folder_id)
+        for f in files:
+            try:
+                self.minio.delete_file(f.object_name)
+            except Exception:
+                pass  # 忽略删除错误
+
+        # 删除文件夹内的所有文件记录
         await self.file_repo.delete_by_folder_id(folder_id)
 
         # 删除文件夹
@@ -193,7 +205,8 @@ class ResourceService:
                     name=f.name,
                     size=f.size,
                     type=f.type,
-                    content=f.content,
+                    object_name=f.object_name,
+                    url=self.minio.get_presigned_url(f.object_name),
                     created_at=f.created_at
                 ) for f in files
             ],
@@ -213,8 +226,56 @@ class ResourceService:
             name=file.name,
             size=file.size,
             type=file.type,
-            content=file.content,
+            object_name=file.object_name,
+            url=self.minio.get_presigned_url(file.object_name),
             created_at=file.created_at
+        )
+
+    async def upload_file_multipart(
+        self,
+        folder_id: str,
+        file: UploadFile
+    ) -> FileResponse:
+        """上传文件（multipart/form-data 方式）"""
+        folder = await self.folder_repo.get_by_id(folder_id)
+        if not folder:
+            raise NotFoundError("文件夹不存在")
+
+        # 读取文件内容
+        file_data = await file.read()
+        file_size = len(file_data)
+        content_type = file.content_type or "application/octet-stream"
+
+        # 上传到 MinIO（使用文件夹 ID 组织文件）
+        object_name = self.minio.upload_file(
+            file_data,
+            file.filename,
+            content_type,
+            prefix="courses/",
+            folder_id=folder_id
+        )
+
+        # 保存文件元数据到数据库
+        db_file = CourseFile(
+            folder_id=folder_id,
+            course_id=folder.course_id,
+            name=file.filename,
+            size=file_size,
+            type=content_type,
+            object_name=object_name
+        )
+        db_file = await self.file_repo.create(db_file)
+
+        return FileResponse(
+            id=db_file.id,
+            folder_id=db_file.folder_id,
+            course_id=db_file.course_id,
+            name=db_file.name,
+            size=db_file.size,
+            type=db_file.type,
+            object_name=db_file.object_name,
+            url=self.minio.get_presigned_url(db_file.object_name),
+            created_at=db_file.created_at
         )
 
     async def upload_file(
@@ -222,34 +283,52 @@ class ResourceService:
         folder_id: str,
         request: FileUploadRequest
     ) -> FileResponse:
-        """上传文件"""
+        """上传文件（Base64 JSON 方式，兼容旧接口）"""
         folder = await self.folder_repo.get_by_id(folder_id)
         if not folder:
             raise NotFoundError("文件夹不存在")
 
-        # 检查同名文件（可选，根据 /utils 实现）
-        # if await self.file_repo.name_exists(folder_id, request.name):
-        #     raise ConflictError("文件名已存在")
+        # 解码 Base64 内容
+        content = request.content
+        if "," in content:
+            # 处理 data:xxx;base64,xxx 格式
+            content = content.split(",", 1)[1]
 
-        file = CourseFile(
+        try:
+            file_data = base64.b64decode(content)
+        except Exception:
+            raise ValueError("无效的 Base64 编码")
+
+        # 上传到 MinIO（使用文件夹 ID 组织文件）
+        object_name = self.minio.upload_file(
+            file_data,
+            request.name,
+            request.type,
+            prefix="courses/",
+            folder_id=folder_id
+        )
+
+        # 保存文件元数据到数据库
+        db_file = CourseFile(
             folder_id=folder_id,
             course_id=folder.course_id,
             name=request.name,
             size=request.size,
             type=request.type,
-            content=request.content
+            object_name=object_name
         )
-        file = await self.file_repo.create(file)
+        db_file = await self.file_repo.create(db_file)
 
         return FileResponse(
-            id=file.id,
-            folder_id=file.folder_id,
-            course_id=file.course_id,
-            name=file.name,
-            size=file.size,
-            type=file.type,
-            content=file.content,
-            created_at=file.created_at
+            id=db_file.id,
+            folder_id=db_file.folder_id,
+            course_id=db_file.course_id,
+            name=db_file.name,
+            size=db_file.size,
+            type=db_file.type,
+            object_name=db_file.object_name,
+            url=self.minio.get_presigned_url(db_file.object_name),
+            created_at=db_file.created_at
         )
 
     async def update_file(
@@ -257,7 +336,7 @@ class ResourceService:
         file_id: str,
         request: FileUpdateRequest
     ) -> FileResponse:
-        """更新文件"""
+        """更新文件（仅支持更新文件名）"""
         file = await self.file_repo.get_by_id(file_id)
         if not file:
             raise NotFoundError("文件不存在")
@@ -265,8 +344,6 @@ class ResourceService:
         update_data = {}
         if request.name is not None:
             update_data["name"] = request.name
-        if request.content is not None:
-            update_data["content"] = request.content
 
         if update_data:
             file = await self.file_repo.update(file, update_data)
@@ -278,7 +355,8 @@ class ResourceService:
             name=file.name,
             size=file.size,
             type=file.type,
-            content=file.content,
+            object_name=file.object_name,
+            url=self.minio.get_presigned_url(file.object_name),
             created_at=file.created_at
         )
 
@@ -288,8 +366,27 @@ class ResourceService:
         if not file:
             raise NotFoundError("文件不存在")
 
+        # 从 MinIO 删除文件
+        try:
+            self.minio.delete_file(file.object_name)
+        except Exception:
+            pass  # 忽略删除错误
+
+        # 从数据库删除记录
         await self.file_repo.delete(file)
 
-    async def download_file(self, file_id: str) -> FileResponse:
-        """下载文件（返回完整文件信息）"""
-        return await self.get_file(file_id)
+    async def download_file(self, file_id: str) -> Tuple[bytes, str, str]:
+        """
+        下载文件
+
+        Returns:
+            Tuple[bytes, str, str]: (文件内容, 文件名, MIME类型)
+        """
+        file = await self.file_repo.get_by_id(file_id)
+        if not file:
+            raise NotFoundError("文件不存在")
+
+        # 从 MinIO 下载文件
+        file_data = self.minio.download_file(file.object_name)
+
+        return file_data, file.name, file.type

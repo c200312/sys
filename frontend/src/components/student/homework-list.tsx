@@ -3,15 +3,27 @@ import { FileText, Calendar, CheckCircle, Clock, XCircle, Upload, Image, Papercl
 import { toast } from 'sonner@2.0.3';
 import api from '../../utils/api-client';
 
+// 历史附件（从服务器返回，有 object_name 和 url）
+interface ExistingAttachment {
+  name: string;
+  type: string;
+  size: number;
+  object_name: string;
+  url?: string;
+}
+
+// 新上传的附件（有 content，Base64 编码）
+interface NewAttachment {
+  name: string;
+  type: string;
+  size: number;
+  content: string;
+}
+
 interface HomeworkSubmission {
   id: string;
-  content: string;
-  attachments?: Array<{
-    name: string;
-    type: string;
-    size: number;
-    content: string;
-  }>;
+  content?: string;  // 可选，与附件至少有一个
+  attachments?: ExistingAttachment[];
   score?: number;
   feedback?: string;
   submitted_at: string;
@@ -45,12 +57,10 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
   const [loading, setLoading] = useState(true);
   const [submittingHomework, setSubmittingHomework] = useState<Homework | null>(null);
   const [submissionText, setSubmissionText] = useState('');
-  const [attachments, setAttachments] = useState<Array<{
-    name: string;
-    type: string;
-    size: number;
-    content: string;
-  }>>([]);
+  // 新上传的附件（需要上传到服务器）
+  const [newAttachments, setNewAttachments] = useState<NewAttachment[]>([]);
+  // 保留的历史附件（已在服务器上）
+  const [existingAttachments, setExistingAttachments] = useState<ExistingAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -132,8 +142,11 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
   // 开始提交作业
   const startSubmit = (homework: Homework) => {
     setSubmittingHomework(homework);
-    setSubmissionText(homework.submission?.content || '');
-    setAttachments(homework.submission?.attachments || []);
+    setSubmissionText(homework.submission?.content ?? '');
+    // 设置历史附件（已上传到服务器的）
+    setExistingAttachments(homework.submission?.attachments ?? []);
+    // 清空新附件
+    setNewAttachments([]);
   };
 
   // 处理文件选择
@@ -145,7 +158,7 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
       const reader = new FileReader();
       reader.onload = (event) => {
         const content = event.target?.result as string;
-        setAttachments(prev => [...prev, {
+        setNewAttachments(prev => [...prev, {
           name: file.name,
           type: file.type,
           size: file.size,
@@ -161,9 +174,14 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
     }
   };
 
-  // 删除附件
-  const removeAttachment = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
+  // 删除新附件
+  const removeNewAttachment = (index: number) => {
+    setNewAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // 删除历史附件
+  const removeExistingAttachment = (index: number) => {
+    setExistingAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   // 格式化文件大小
@@ -177,21 +195,34 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
   const handleSubmit = async () => {
     if (!submittingHomework) return;
 
-    if (!submissionText.trim() && attachments.length === 0) {
+    const hasContent = submissionText.trim().length > 0;
+    const hasAttachments = newAttachments.length > 0 || existingAttachments.length > 0;
+
+    if (!hasContent && !hasAttachments) {
       toast.error('请输入作业内容或上传附件');
       return;
     }
 
     try {
+      // 发送新附件和保留的历史附件
       const result = await api.submitHomework(submittingHomework.id, {
-        content: submissionText.trim(),
-        attachments: attachments.length > 0 ? attachments : undefined,
+        content: submissionText.trim() || undefined,
+        attachments: newAttachments.length > 0 ? newAttachments : undefined,
+        existing_attachments: existingAttachments.length > 0
+          ? existingAttachments.map(att => ({
+              name: att.name,
+              type: att.type,
+              size: att.size,
+              object_name: att.object_name,
+            }))
+          : undefined,
       });
       if (result.success) {
         toast.success('作业提交成功');
         setSubmittingHomework(null);
         setSubmissionText('');
-        setAttachments([]);
+        setNewAttachments([]);
+        setExistingAttachments([]);
         loadHomeworks();
       } else {
         toast.error(result.error || '提交失败');
@@ -206,12 +237,16 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
   const downloadTeacherAttachment = (homework: Homework) => {
     if (!homework.attachment) return;
 
-    const link = document.createElement('a');
-    link.href = homework.attachment.content;
-    link.download = homework.attachment.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // 使用预签名 URL 下载
+    if (homework.attachment.url) {
+      const link = document.createElement('a');
+      link.href = homework.attachment.url;
+      link.download = homework.attachment.name;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   if (loading) {
@@ -376,7 +411,8 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
                 onClick={() => {
                   setSubmittingHomework(null);
                   setSubmissionText('');
-                  setAttachments([]);
+                  setNewAttachments([]);
+                  setExistingAttachments([]);
                 }}
                 className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
               >
@@ -414,7 +450,7 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
               <label className="block text-gray-700 text-sm mb-2">
                 附件上传 <span className="text-gray-400">(支持图片、文档等)</span>
               </label>
-              
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -423,7 +459,7 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
                 className="hidden"
                 accept="image/*,.pdf,.doc,.docx,.txt,.zip"
               />
-              
+
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm"
@@ -432,12 +468,46 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
                 <span>选择文件</span>
               </button>
 
-              {/* 附件列表 */}
-              {attachments.length > 0 && (
+              {/* 历史附件列表 */}
+              {existingAttachments.length > 0 && (
                 <div className="mt-4 space-y-2">
-                  {attachments.map((attachment, index) => (
+                  <p className="text-gray-600 text-xs">已上传的附件：</p>
+                  {existingAttachments.map((attachment: ExistingAttachment, index: number) => (
                     <div
-                      key={index}
+                      key={`existing-${index}`}
+                      className="flex items-center justify-between p-3 bg-green-50 rounded-lg"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {attachment.type.startsWith('image/') ? (
+                          <Image size={16} className="text-green-600 flex-shrink-0" />
+                        ) : (
+                          <FileText size={16} className="text-green-600 flex-shrink-0" />
+                        )}
+                        <span className="text-gray-700 text-sm truncate">{attachment.name}</span>
+                        <span className="text-gray-500 text-xs flex-shrink-0">
+                          ({formatFileSize(attachment.size)})
+                        </span>
+                        <span className="text-green-600 text-xs">(已上传)</span>
+                      </div>
+                      <button
+                        onClick={() => removeExistingAttachment(index)}
+                        className="p-1 text-red-500 hover:bg-red-50 rounded"
+                        title="移除此附件"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 新附件列表 */}
+              {newAttachments.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-gray-600 text-xs">新添加的附件：</p>
+                  {newAttachments.map((attachment: NewAttachment, index: number) => (
+                    <div
+                      key={`new-${index}`}
                       className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                     >
                       <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -452,7 +522,7 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
                         </span>
                       </div>
                       <button
-                        onClick={() => removeAttachment(index)}
+                        onClick={() => removeNewAttachment(index)}
                         className="p-1 text-red-500 hover:bg-red-50 rounded"
                       >
                         <X size={16} />
@@ -467,7 +537,7 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
             <div className="flex items-center gap-3">
               <button
                 onClick={handleSubmit}
-                disabled={!submissionText.trim() && attachments.length === 0}
+                disabled={!submissionText.trim() && newAttachments.length === 0 && existingAttachments.length === 0}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 <Send size={16} />
@@ -477,7 +547,8 @@ export function HomeworkList({ studentId, courseId }: HomeworkListProps) {
                 onClick={() => {
                   setSubmittingHomework(null);
                   setSubmissionText('');
-                  setAttachments([]);
+                  setNewAttachments([]);
+                  setExistingAttachments([]);
                 }}
                 className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
               >

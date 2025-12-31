@@ -138,11 +138,11 @@ class Homework(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     # 附件 (JSON 格式存储)
-    # 结构: {"name": str, "type": str, "size": int, "content": str}
+    # 结构: {"name": str, "type": str, "size": int, "object_name": str}
     attachment: Optional[dict] = Field(default=None, sa_column=Column(JSON))
 
     # 批改标准 (JSON 格式存储)
-    # 结构: {"type": "text"|"file", "content": str, "file_name"?: str, "file_size"?: int}
+    # 结构: {"type": "text"|"file", "content": str, "file_name"?: str, "file_size"?: int, "object_name"?: str}
     grading_criteria: Optional[dict] = Field(default=None, sa_column=Column(JSON))
 
     # 关系
@@ -159,11 +159,11 @@ class HomeworkSubmission(SQLModel, table=True):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
     homework_id: str = Field(foreign_key="homeworks.id", index=True)
     student_id: str = Field(foreign_key="students.id", index=True)
-    content: str = Field(sa_column=Column(Text))
+    content: Optional[str] = Field(default=None, sa_column=Column(Text))  # 文本内容（可选，与附件至少有一个）
     submitted_at: datetime = Field(default_factory=datetime.utcnow)
 
     # 附件列表 (JSON 格式存储)
-    # 结构: [{"name": str, "type": str, "size": int, "content": str}, ...]
+    # 结构: [{"name": str, "type": str, "size": int, "object_name": str}, ...]
     attachments: Optional[list] = Field(default=None, sa_column=Column(JSON))
 
     # 批改信息
@@ -204,7 +204,7 @@ class CourseFile(SQLModel, table=True):
     name: str = Field(max_length=255)
     size: int  # 文件大小 (字节)
     type: str = Field(max_length=100)  # MIME 类型
-    content: str = Field(sa_column=Column(Text))  # Base64 编码的文件内容
+    object_name: str = Field(max_length=500)  # MinIO 对象名称
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     # 关系

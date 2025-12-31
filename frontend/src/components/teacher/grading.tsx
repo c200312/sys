@@ -400,15 +400,18 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
 
       // 如果有附件，添加附件
       if (submission.attachments && submission.attachments.length > 0) {
-        submission.attachments.forEach((attachment, index) => {
+        for (const attachment of submission.attachments) {
           try {
-            // Base64转二进制
-            const base64Data = attachment.content.split(',')[1];
-            studentFolder.file(attachment.name, base64Data, { base64: true });
+            // 从 MinIO URL 下载文件
+            if (attachment.url) {
+              const response = await fetch(attachment.url);
+              const blob = await response.blob();
+              studentFolder.file(attachment.name, blob);
+            }
           } catch (error) {
             console.error(`处理附件 ${attachment.name} 失败:`, error);
           }
-        });
+        }
       }
 
       // 生成zip文件
@@ -454,21 +457,24 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
 
         // 如果有附件，添加附件
         if (submission.attachments && submission.attachments.length > 0) {
-          submission.attachments.forEach((attachment, index) => {
+          for (const attachment of submission.attachments) {
             try {
-              // Base64转二进制
-              const base64Data = attachment.content.split(',')[1];
-              studentFolder.file(attachment.name, base64Data, { base64: true });
+              // 从 MinIO URL 下载文件
+              if (attachment.url) {
+                const response = await fetch(attachment.url);
+                const blob = await response.blob();
+                studentFolder.file(attachment.name, blob);
+              }
             } catch (error) {
               console.error(`处理${submission.student_name}的附件失败:`, error);
             }
-          });
+          }
         }
       }
 
       // 生成zip文件
       const content = await zip.generateAsync({ type: 'blob' });
-      
+
       // 创建下载链接
       const url = URL.createObjectURL(content);
       const link = document.createElement('a');
@@ -535,8 +541,10 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
                   <p className="text-gray-500 text-xs">{formatFileSize(homework.attachment.size)}</p>
                 </div>
                 <a
-                  href={homework.attachment.content}
+                  href={homework.attachment.url || '#'}
                   download={homework.attachment.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="p-2 text-blue-600 hover:bg-blue-100 rounded transition"
                   title="下载附件"
                 >
@@ -562,8 +570,10 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
                     <p className="text-gray-500 text-xs">{formatFileSize(homework.grading_criteria.file_size || 0)}</p>
                   </div>
                   <a
-                    href={homework.grading_criteria.content}
+                    href={homework.grading_criteria.url || '#'}
                     download={homework.grading_criteria.file_name}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="p-2 text-green-600 hover:bg-green-100 rounded transition"
                     title="下载评分标准"
                   >

@@ -183,15 +183,20 @@ export function CourseResources({ courseId }: CourseResourcesProps) {
       const result = await api.getFile(fileId);
       if (result.success && result.data) {
         const file = result.data;
-        // 创建下载链接
-        const link = document.createElement('a');
-        link.href = file.content || '';
-        link.download = file.name;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        toast.success('文件下载成功');
+        // 使用预签名 URL 下载
+        if (file.url) {
+          const link = document.createElement('a');
+          link.href = file.url;
+          link.download = file.name;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          toast.success('文件下载成功');
+        } else {
+          // 回退到后端下载接口
+          window.open(api.getFileDownloadUrl(fileId), '_blank');
+        }
       } else {
         toast.error(result.error || '下载失败');
       }

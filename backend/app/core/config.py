@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     aiwriting_model: str = "gpt-4o"
 
+    # MinIO 对象存储配置
+    minio_endpoint: str = "localhost:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin123"
+    minio_bucket: str = "edu-system"
+    minio_secure: bool = False
+
     @property
     def cors_origins_list(self) -> List[str]:
         """将逗号分隔的 CORS origins 转为列表"""

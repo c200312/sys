@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     aiwriting_model: str = "gpt-4o"
 
+    # AI RAG 服务配置
+    airag_port: int = 8004
+    airag_model: str = "gpt-4o"
+
     # MinIO 对象存储配置
     minio_endpoint: str = "localhost:9000"
     minio_access_key: str = "minioadmin"

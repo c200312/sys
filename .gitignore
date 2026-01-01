@@ -108,7 +108,10 @@ Thumbs.db
 *.temp
 .cache/
 
-Nano Banana PPT Agent/
 
 # AI PPT 生成的临时文件
 backend/aippt/storage/
+
+# AI RAG 知识库数据
+backend/airag/chroma_db/
+backend/airag/index_store/

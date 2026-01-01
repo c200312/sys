@@ -1,16 +1,193 @@
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, Send, Loader, User, Bot } from 'lucide-react';
+import { Sparkles, Send, Loader, User, Bot, Database, Upload, FileText, X, Trash2, Plus, Folder, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
+import api, { Course, CourseFolder, CourseFile } from '../../utils/api-client';
+
+// 源数据项类型
+interface SourceItem {
+  name: string;  // 文件名
+  content: string;  // 相关片段内容
+  course_name?: string;  // 课程名称
+}
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  sources?: SourceItem[];
 }
 
 interface StudentAIAssistantProps {
   studentId: string;
+}
+
+interface KnowledgeItem {
+  id: string;
+  name: string;
+  source_type: 'personal' | 'course';
+  course_id?: string;
+  course_name?: string;
+  chunks_count: number;
+  created_at: string;
+  owner_id?: string;
+}
+
+// @ts-ignore
+const AI_RAG_URL = (import.meta.env?.VITE_AI_RAG_URL as string) || 'http://localhost:8004';
+
+// 解析消息内容，将角标 [1], [2] 等转换为可点击元素
+function parseMessageWithCitations(
+  content: string,
+  sources: SourceItem[],
+  onCitationClick: (index: number) => void
+): React.ReactNode[] {
+  if (!sources || sources.length === 0) {
+    return [content];
+  }
+
+  // 匹配 [1], [2], [1][2] 等格式的角标
+  const citationRegex = /\[(\d+)\]/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = citationRegex.exec(content)) !== null) {
+    // 添加角标前的文本
+    if (match.index > lastIndex) {
+      parts.push(content.slice(lastIndex, match.index));
+    }
+
+    const citationNum = parseInt(match[1], 10);
+    const sourceIndex = citationNum - 1; // 角标从1开始，数组从0开始
+
+    // 检查是否有对应的源
+    if (sourceIndex >= 0 && sourceIndex < sources.length) {
+      parts.push(
+        <button
+          key={`citation-${match.index}`}
+          onClick={() => onCitationClick(sourceIndex)}
+          className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 mx-0.5 text-xs font-medium text-blue-600 bg-blue-100 rounded hover:bg-blue-200 transition cursor-pointer align-super"
+          title={`查看来源: ${sources[sourceIndex].name}`}
+        >
+          {citationNum}
+        </button>
+      );
+    } else {
+      // 没有对应源，保留原文
+      parts.push(match[0]);
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // 添加剩余文本
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex));
+  }
+
+  return parts;
+}
+
+// 源引用弹窗组件
+function SourcePopup({
+  source,
+  index,
+  onClose
+}: {
+  source: SourceItem;
+  index: number;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+      <div
+        className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[70vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* 头部 */}
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-6 h-6 text-sm font-medium text-blue-600 bg-blue-100 rounded">
+              {index + 1}
+            </span>
+            <h3 className="text-sm font-medium text-gray-800 truncate">{source.name}</h3>
+            {source.course_name && (
+              <span className="text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
+                {source.course_name}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* 内容 */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+            {source.content}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 带角标的消息内容组件
+function MessageContent({
+  content,
+  sources
+}: {
+  content: string;
+  sources?: SourceItem[];
+}) {
+  const [activeSource, setActiveSource] = useState<number | null>(null);
+
+  const handleCitationClick = (index: number) => {
+    setActiveSource(index);
+  };
+
+  const parsedContent = sources && sources.length > 0
+    ? parseMessageWithCitations(content, sources, handleCitationClick)
+    : [content];
+
+  return (
+    <>
+      <p className="whitespace-pre-wrap text-sm">{parsedContent}</p>
+
+      {/* 底部参考来源列表 */}
+      {sources && sources.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-gray-200">
+          <p className="text-xs text-gray-500 mb-1">参考来源：</p>
+          <div className="flex flex-wrap gap-1">
+            {sources.map((source, index) => (
+              <button
+                key={index}
+                onClick={() => setActiveSource(index)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-gray-600 bg-gray-50 hover:bg-gray-100 rounded border border-gray-200 transition"
+              >
+                <span className="text-blue-600 font-medium">[{index + 1}]</span>
+                <span className="truncate max-w-[120px]">{source.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 源引用弹窗 */}
+      {activeSource !== null && sources && sources[activeSource] && (
+        <SourcePopup
+          source={sources[activeSource]}
+          index={activeSource}
+          onClose={() => setActiveSource(null)}
+        />
+      )}
+    </>
+  );
 }
 
 export function StudentAIAssistant({ studentId }: StudentAIAssistantProps) {
@@ -19,22 +196,181 @@ export function StudentAIAssistant({ studentId }: StudentAIAssistantProps) {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // 知识库相关
+  const [knowledgeList, setKnowledgeList] = useState<KnowledgeItem[]>([]);
+  const [personalKnowledgeIds, setPersonalKnowledgeIds] = useState<Set<string>>(new Set());
+  const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
+  const [courses, setCourses] = useState<Course[]>([]);
+
+  // 上传相关
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // 初始化欢迎消息
   useEffect(() => {
     setMessages([
       {
         id: '1',
         role: 'assistant',
-        content: '你好！我是你的AI学习助手。我可以帮助你：\n\n📚 解答学习问题\n💡 提供学习建议\n📝 辅导作业问题\n🎯 制定学习计划\n\n有什么我可以帮助你的吗？',
+        content: '你好！我是你的AI学习助手。\n\n我会自动使用你所在课程的资料来回答问题。你也可以上传自己的学习资料。\n\n💡 点击"资料管理"可以查看和管理你的个人资料。',
         timestamp: new Date(),
       },
     ]);
   }, []);
 
+  // 加载学生课程和知识库
+  useEffect(() => {
+    if (studentId) {
+      loadCoursesAndKnowledge();
+    }
+  }, [studentId]);
+
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const loadCoursesAndKnowledge = async () => {
+    // 加载课程列表
+    const coursesResult = await api.getStudentCourses(studentId);
+    if (coursesResult.success && coursesResult.data) {
+      setCourses(coursesResult.data.courses);
+    }
+
+    // 加载知识库列表
+    const courseIds = coursesResult.success && coursesResult.data
+      ? coursesResult.data.courses.map((c: Course) => c.id)
+      : [];
+
+    const response = await fetch(`${AI_RAG_URL}/knowledge/list`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': studentId,
+      },
+      body: JSON.stringify({ course_ids: courseIds })
+    });
+
+    const result = await response.json();
+    if (result.success) {
+      const list = result.knowledge_list || [];
+      setKnowledgeList(list);
+      // 记录个人知识库ID（个人资料默认选中）
+      const personalIds = new Set(
+        list.filter((k: KnowledgeItem) => k.source_type === 'personal').map((k: KnowledgeItem) => k.id)
+      );
+      setPersonalKnowledgeIds(personalIds);
+    }
+  };
+
+  const handleTogglePersonalKnowledge = (knowledgeId: string) => {
+    setPersonalKnowledgeIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(knowledgeId)) {
+        newSet.delete(knowledgeId);
+      } else {
+        newSet.add(knowledgeId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const allowedExtensions = ['.pdf', '.docx', '.txt', '.md'];
+    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+
+    if (!allowedExtensions.includes(fileExtension)) {
+      toast.error('只支持 PDF、DOCX、TXT、MD 格式的文件');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('文件大小不能超过 10MB');
+      return;
+    }
+
+    setUploadingFile(true);
+
+    try {
+      const base64 = await fileToBase64(file);
+
+      const response = await fetch(`${AI_RAG_URL}/knowledge/add`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': studentId,
+        },
+        body: JSON.stringify({
+          name: file.name,
+          content_base64: base64,
+          file_type: fileExtension,
+          source_type: 'personal',
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast.success(`已添加 "${file.name}"`);
+        // 添加到个人知识库并自动选中
+        setPersonalKnowledgeIds(prev => new Set(prev).add(result.knowledge_id));
+        loadCoursesAndKnowledge();
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      } else {
+        toast.error(result.error || '上传失败');
+      }
+    } catch (error) {
+      console.error('上传文件失败:', error);
+      toast.error('上传失败，请检查网络连接');
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleDeleteKnowledge = async (knowledgeId: string, knowledgeName: string) => {
+    if (!confirm(`确定要删除 "${knowledgeName}" 吗？`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${AI_RAG_URL}/knowledge/${knowledgeId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-id': studentId,
+        }
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        toast.success('删除成功');
+        setPersonalKnowledgeIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(knowledgeId);
+          return newSet;
+        });
+        loadCoursesAndKnowledge();
+      } else {
+        toast.error(result.error || '删除失败');
+      }
+    } catch (error) {
+      console.error('删除失败:', error);
+      toast.error('删除失败，请检查网络连接');
+    }
+  };
 
   // 发送消息
   const handleSendMessage = async () => {
@@ -54,86 +390,122 @@ export function StudentAIAssistant({ studentId }: StudentAIAssistantProps) {
     setInputMessage('');
     setIsLoading(true);
 
-    // 模拟AI回复
-    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
+    try {
+      // 构建历史消息
+      const history = messages
+        .filter(m => m.id !== '1')
+        .slice(-6)
+        .map(m => ({
+          role: m.role,
+          content: m.content
+        }));
 
-    const aiResponse = generateAIResponse(inputMessage);
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: aiResponse,
-      timestamp: new Date(),
-    };
+      // 获取课程资源ID + 选中的个人资源ID
+      const courseKnowledgeIds = knowledgeList
+        .filter(k => k.source_type === 'course')
+        .map(k => k.id);
+      const selectedIds = [...courseKnowledgeIds, ...Array.from(personalKnowledgeIds)];
 
-    setMessages(prev => [...prev, assistantMessage]);
-    setIsLoading(false);
-  };
+      const response = await fetch(`${AI_RAG_URL}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': studentId,
+        },
+        body: JSON.stringify({
+          message: inputMessage,
+          knowledge_ids: selectedIds,
+          history
+        })
+      });
 
-  // 生成AI回复
-  const generateAIResponse = (userInput: string): string => {
-    const input = userInput.toLowerCase();
+      const result = await response.json();
 
-    // 学习相关
-    if (input.includes('学习') || input.includes('怎么学')) {
-      return '关于学习方法，我有以下建议：\n\n1. 制定学习计划：每天固定时间学习，保持规律\n2. 主动思考：不要只是被动接受知识，要主动提问\n3. 及时复习：遵循艾宾浩斯遗忘曲线，定期复习\n4. 做好笔记：记录重点和难点，方便回顾\n5. 实践应用：理论结合实践，加深理解\n\n你想了解哪方面的具体方法？';
+      if (result.success) {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: result.message,
+          timestamp: new Date(),
+          sources: result.sources
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      } else {
+        toast.error(result.error || '获取回答失败');
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: `抱歉，出现了一些问题：${result.error || '未知错误'}`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+    } catch (error) {
+      console.error('发送消息失败:', error);
+      toast.error('发送消息失败，请检查网络连接');
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: '抱歉，无法连接到AI服务，请确保RAG服务已启动。',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
     }
-
-    // 作业相关
-    if (input.includes('作业') || input.includes('题目')) {
-      return '关于作业问题：\n\n📝 我可以帮你：\n• 理解题目要求\n• 提供解题思路\n• 讲解相关知识点\n• 检查答案逻辑\n\n💡 建议：\n• 先独立思考，再寻求帮助\n• 理解解题方法比答案更重要\n• 举一反三，掌握同类题型\n\n请告诉我具体的题目或问题！';
-    }
-
-    // 课程相关
-    if (input.includes('课程') || input.includes('课堂')) {
-      return '关于课程学习：\n\n✅ 课前准备：\n• 预习课程内容\n• 准备好学习材料\n• 思考可能的疑问\n\n✅ 课堂学习：\n• 认真听讲，做好笔记\n• 积极参与讨论\n• 及时提问\n\n✅ 课后巩固：\n• 整理笔记\n• 完成课后练习\n• 复习重点难点\n\n有什么具体问题吗？';
-    }
-
-    // 考试相关
-    if (input.includes('考试') || input.includes('复习')) {
-      return '考试复习建议：\n\n📚 复习策略：\n1. 梳理知识框架：建立完整的知识体系\n2. 重点突破：找出薄弱环节重点复习\n3. 真题练习：熟悉题型和考点\n4. 错题整理：总结易错点和解题方法\n\n⏰ 时间规划：\n• 提前制定复习计划\n• 合理分配各科时间\n• 劳逸结合，保证休息\n\n💪 心态调整：\n• 保持自信\n• 适度紧张\n• 规律作息\n\n加油！相信你一定能考好！';
-    }
-
-    // 时间管理
-    if (input.includes('时间') || input.includes('计划')) {
-      return '时间管理建议：\n\n⏰ 制定计划：\n• 使用番茄工作法（25分钟专注+5分钟休息）\n• 按优先级排列任务\n• 预留缓冲时间\n\n📋 执行技巧：\n• 消除干扰（关闭手机通知）\n• 一次只做一件事\n• 设置明确的deadline\n\n📊 效果评估：\n• 记录时间使用情况\n• 定期反思和调整\n• 奖励自己的进步\n\n坚持就是胜利！';
-    }
-
-    // 默认回复
-    return `我理解你的问题："${userInput}"\n\n作为你的学习助手，我会尽力帮助你。你可以问我：\n\n• 学习方法和技巧\n• 课程内容相关问题\n• 作业辅导和答疑\n• 学习计划制定\n• 考试复习建议\n• 时间管理方法\n\n请告诉我更具体的问题，我会给你详细的建议！😊`;
   };
 
   // 快捷问题
   const quickQuestions = [
-    '如何制定学习计划？',
-    '怎样提高学习效率？',
-    '作业遇到困难怎么办？',
-    '如何准备考试？',
+    '你好，你能帮我做什么？',
+    '请总结一下重点知识点',
+    '有哪些需要注意的难点？',
+    '能给我出几道练习题吗？',
   ];
 
   const handleQuickQuestion = (question: string) => {
     setInputMessage(question);
   };
 
+  // 获取知识库统计
+  const courseCount = knowledgeList.filter(k => k.source_type === 'course').length;
+  const personalCount = knowledgeList.filter(k => k.source_type === 'personal').length;
+
   return (
     <div className="h-full flex flex-col bg-white rounded-lg shadow-sm border border-gray-200">
       {/* 头部 */}
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center">
-            <Sparkles size={24} className="text-white" />
+      <div className="p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center">
+              <Sparkles size={20} className="text-white" />
+            </div>
+            <div>
+              <h2 className="text-gray-800 text-lg">AI 学习助手</h2>
+              <p className="text-gray-500 text-xs">基于课程资料的智能问答</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-gray-800">AI学习助手</h2>
-            <p className="text-gray-500 text-sm">智能解答，助力学习</p>
+          {/* 知识库状态 */}
+          <div className="flex items-center gap-2 text-sm">
+            {courseCount > 0 && (
+              <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                课程资料 {courseCount}
+              </span>
+            )}
+            {personalCount > 0 && (
+              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+                个人资料 {personalCount}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
       {/* 消息列表 */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 1 && (
-          <div className="mb-6">
-            <p className="text-gray-600 text-sm mb-3">💡 试试问我这些问题：</p>
+          <div className="mb-4">
+            <p className="text-gray-600 text-sm mb-2">💡 试试问我这些问题：</p>
             <div className="grid grid-cols-2 gap-2">
               {quickQuestions.map((question, index) => (
                 <button
@@ -148,7 +520,7 @@ export function StudentAIAssistant({ studentId }: StudentAIAssistantProps) {
           </div>
         )}
 
-        {messages.map((message) => (
+        {messages.map(message => (
           <div
             key={message.id}
             className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
@@ -171,13 +543,13 @@ export function StudentAIAssistant({ studentId }: StudentAIAssistantProps) {
             {/* 消息内容 */}
             <div className={`flex-1 ${message.role === 'user' ? 'flex justify-end' : ''}`}>
               <div
-                className={`inline-block max-w-[80%] px-4 py-3 rounded-lg ${
+                className={`inline-block max-w-[85%] px-4 py-3 rounded-lg ${
                   message.role === 'user'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-800'
                 }`}
               >
-                <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+                <MessageContent content={message.content} sources={message.sources} />
                 <p
                   className={`text-xs mt-1 ${
                     message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
@@ -199,7 +571,10 @@ export function StudentAIAssistant({ studentId }: StudentAIAssistantProps) {
               <Bot size={16} className="text-white" />
             </div>
             <div className="inline-block px-4 py-3 bg-gray-100 rounded-lg">
-              <Loader size={16} className="text-gray-500 animate-spin" />
+              <div className="flex items-center gap-2">
+                <Loader size={16} className="text-gray-500 animate-spin" />
+                <span className="text-gray-500 text-sm">正在思考...</span>
+              </div>
             </div>
           </div>
         )}
@@ -207,8 +582,25 @@ export function StudentAIAssistant({ studentId }: StudentAIAssistantProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 输入框 */}
+      {/* 输入框区域 */}
       <div className="p-4 border-t border-gray-200">
+        {/* 知识库状态 */}
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Database size={16} />
+            <span>
+              使用课程资料 ({courseCount}) + 已选个人资料 ({personalKnowledgeIds.size})
+            </span>
+          </div>
+          <button
+            onClick={() => setShowKnowledgeModal(true)}
+            className="text-sm text-blue-600 hover:text-blue-700"
+          >
+            资料管理
+          </button>
+        </div>
+
+        {/* 输入框 */}
         <div className="flex gap-2">
           <input
             type="text"
@@ -227,14 +619,139 @@ export function StudentAIAssistant({ studentId }: StudentAIAssistantProps) {
           <button
             onClick={handleSendMessage}
             disabled={isLoading || !inputMessage.trim()}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <Send size={18} />
             <span>发送</span>
           </button>
         </div>
-        <p className="text-gray-400 text-xs mt-2">按 Enter 发送消息</p>
+        <p className="text-gray-400 text-xs mt-2">
+          回答基于你所在课程的资料，可添加个人资料获得更精准的回答
+        </p>
       </div>
+
+      {/* 资料管理弹窗 */}
+      {showKnowledgeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[80vh] flex flex-col">
+            {/* 弹窗头部 */}
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-800">个人资料管理</h2>
+              <button
+                onClick={() => setShowKnowledgeModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* 弹窗内容 */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {/* 上传区域 */}
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  上传个人资料
+                </label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt,.md"
+                  onChange={handleFileSelect}
+                  disabled={uploadingFile}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
+                />
+                <p className="text-xs text-gray-500 mt-2">支持 PDF、DOCX、TXT、MD，最大 10MB</p>
+
+                {uploadingFile && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600 mt-2">
+                    <Loader size={16} className="animate-spin" />
+                    <span>正在上传并处理文件...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 个人资料列表 */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-700 mb-2">我的资料</h3>
+
+                {knowledgeList.filter(k => k.source_type === 'personal').length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">暂无个人资料</p>
+                ) : (
+                  <div className="space-y-2">
+                    {knowledgeList
+                      .filter(k => k.source_type === 'personal')
+                      .map(knowledge => {
+                        const isSelected = personalKnowledgeIds.has(knowledge.id);
+                        return (
+                          <div
+                            key={knowledge.id}
+                            className={`p-3 rounded-lg border transition ${
+                              isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleTogglePersonalKnowledge(knowledge.id)}
+                                className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 mt-1"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <FileText size={14} className="text-gray-400" />
+                                  <span className="text-sm text-gray-800 truncate">{knowledge.name}</span>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">{knowledge.chunks_count} 片段</p>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteKnowledge(knowledge.id, knowledge.name)}
+                                className="text-red-500 hover:bg-red-50 rounded p-1"
+                                title="删除"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+
+              {/* 课程资料统计 */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">课程资料（自动使用）</h3>
+                <div className="flex flex-wrap gap-2">
+                  {knowledgeList
+                    .filter(k => k.source_type === 'course')
+                    .map(knowledge => (
+                      <span
+                        key={knowledge.id}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded text-xs"
+                      >
+                        <FileText size={12} />
+                        {knowledge.name.length > 15 ? knowledge.name.slice(0, 15) + '...' : knowledge.name}
+                      </span>
+                    ))}
+                </div>
+                {courseCount === 0 && (
+                  <p className="text-sm text-gray-500">暂无课程资料</p>
+                )}
+              </div>
+            </div>
+
+            {/* 底部操作按钮 */}
+            <div className="p-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowKnowledgeModal(false)}
+                className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

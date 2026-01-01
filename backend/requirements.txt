@@ -17,8 +17,8 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.1.2
 
 # ============= 工具 =============
-pydantic[email]==2.5.3
-pydantic-settings==2.1.0
+pydantic[email]>=2.10.0
+pydantic-settings>=2.10.0
 python-dotenv==1.0.0
 
 # ============= 开发工具 =============
@@ -40,6 +40,20 @@ pypdf
 python-docx
 markdown
 unstructured
+
+# ============= AI RAG 服务 =============
+pymilvus>=2.3.0
+langchain-milvus
+tiktoken
+chromadb>=0.4.0
+
+# ============= LlamaIndex 高级检索 =============
+llama-index>=0.10.0
+llama-index-embeddings-openai
+llama-index-llms-openai
+llama-index-vector-stores-chroma
+llama-index-retrievers-bm25
+rank-bm25
 
 # ============= 对象存储 =============
 minio==7.2.0

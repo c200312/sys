@@ -112,50 +112,98 @@ export function CourseResources({ courseId }: CourseResourcesProps) {
     fileInputRef.current?.click();
   };
 
-  // 处理文件选择
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !uploadingFolder) return;
+  // 读取单个文件为 base64
+  const readFileAsBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('文件读取失败'));
+      reader.readAsDataURL(file);
+    });
+  };
 
-    // 将文件转换为base64
-    const reader = new FileReader();
-    reader.onload = async () => {
+  // 处理文件选择（支持多文件）
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !uploadingFolder) return;
+
+    const folderId = uploadingFolder;
+    const totalFiles = files.length;
+    let successCount = 0;
+    let failCount = 0;
+
+    // 显示上传开始提示
+    if (totalFiles > 1) {
+      toast.info(`开始上传 ${totalFiles} 个文件...`);
+    }
+
+    // 并行上传所有文件
+    const uploadPromises = Array.from(files).map(async (file) => {
       try {
-        const base64Content = reader.result as string;
-        const result = await api.uploadFile(uploadingFolder, {
+        const base64Content = await readFileAsBase64(file);
+        // 确保 type 不为空，如果为空则使用默认值
+        const fileType = file.type || 'application/octet-stream';
+
+        // 验证内容不为空
+        if (!base64Content || base64Content.length === 0) {
+          failCount++;
+          return { success: false, name: file.name, error: '文件内容为空' };
+        }
+
+        const result = await api.uploadFile(folderId, {
           name: file.name,
           size: file.size,
-          type: file.type,
+          type: fileType,
           content: base64Content,
         });
         if (result.success) {
-          toast.success('文件上传成功');
-          loadResources();
-
-          // 自动展开该文件夹
-          const newExpanded = new Set(expandedFolders);
-          newExpanded.add(uploadingFolder);
-          setExpandedFolders(newExpanded);
+          successCount++;
+          return { success: true, name: file.name };
         } else {
-          toast.error(result.error || '上传失败');
+          failCount++;
+          console.error(`上传失败: ${file.name}`, result.error);
+          return { success: false, name: file.name, error: result.error };
         }
       } catch (error: any) {
-        toast.error(error.message || '上传失败');
-      } finally {
-        setUploadingFolder(null);
-        // 重置input，允许重复上传同一文件
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
+        failCount++;
+        console.error(`上传异常: ${file.name}`, error);
+        return { success: false, name: file.name, error: error.message };
       }
-    };
+    });
 
-    reader.onerror = () => {
-      toast.error('文件读取失败');
-      setUploadingFolder(null);
-    };
+    // 等待所有上传完成
+    await Promise.all(uploadPromises);
 
-    reader.readAsDataURL(file);
+    // 显示结果
+    if (totalFiles === 1) {
+      if (successCount === 1) {
+        toast.success('文件上传成功');
+      } else {
+        toast.error('文件上传失败');
+      }
+    } else {
+      if (failCount === 0) {
+        toast.success(`${successCount} 个文件全部上传成功`);
+      } else if (successCount === 0) {
+        toast.error(`${failCount} 个文件全部上传失败`);
+      } else {
+        toast.warning(`上传完成：${successCount} 个成功，${failCount} 个失败`);
+      }
+    }
+
+    // 刷新资源列表
+    loadResources();
+
+    // 自动展开该文件夹
+    const newExpanded = new Set(expandedFolders);
+    newExpanded.add(folderId);
+    setExpandedFolders(newExpanded);
+
+    // 重置状态
+    setUploadingFolder(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   // 删除文件
@@ -358,13 +406,14 @@ export function CourseResources({ courseId }: CourseResourcesProps) {
 
   return (
     <div>
-      {/* 隐藏的文件输入 */}
+      {/* 隐藏的文件输入（支持多选） */}
       <input
         ref={fileInputRef}
         type="file"
+        multiple
         className="hidden"
         onChange={handleFileChange}
-        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.gif,.zip,.rar"
+        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.jpg,.jpeg,.png,.gif,.zip,.rar"
       />
 
       {/* 头部 */}

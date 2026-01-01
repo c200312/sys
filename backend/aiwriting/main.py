@@ -3,6 +3,11 @@ AI 写作模块 - 使用 LangChain 框架
 提供课程资源的 AI 生成和二次改写功能
 """
 import os
+import sys
+
+# 强制使用 Pydantic v2，避免 Python 3.12 兼容性问题
+os.environ["PYDANTIC_V2_MODE"] = "1"
+
 import io
 import base64
 import uuid

@@ -21,7 +21,7 @@ if settings.database_url.startswith("sqlite"):
 
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.debug,
+    echo=False,  # 关闭 SQL 日志，避免刷屏
     future=True,
     connect_args=connect_args
 )

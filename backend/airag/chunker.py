@@ -2,9 +2,12 @@
 层级分块器：小索引大窗口策略
 """
 import re
+import logging
 from typing import List, Dict, Any
 
 from .models import ChunkWithContext
+
+logger = logging.getLogger(__name__)
 
 
 class HierarchicalChunker:
@@ -48,11 +51,21 @@ class HierarchicalChunker:
         Returns:
             层级分块列表
         """
+        knowledge_id = metadata.get('knowledge_id', 'unknown')
+        filename = metadata.get('name', 'unknown')
+
+        logger.info(f"[CHUNKER] ========== 开始分块 ==========")
+        logger.info(f"[CHUNKER] 文件: {filename}")
+        logger.info(f"[CHUNKER] 知识库ID: {knowledge_id}")
+        logger.info(f"[CHUNKER] 原始内容长度: {len(content)} 字符")
+        logger.info(f"[CHUNKER] 分块配置: small={self.small_chunk_size}, large={self.large_chunk_size}, overlap={self.overlap}")
+
         # 预处理：统一换行符
         content = content.replace('\r\n', '\n').replace('\r', '\n')
 
         # 首先按段落分割成大块
         large_chunks = self._split_into_chunks(content, self.large_chunk_size)
+        logger.info(f"[CHUNKER] 大块数量: {len(large_chunks)}")
 
         # 对每个大块，创建小块索引
         results = []
@@ -72,6 +85,18 @@ class HierarchicalChunker:
                     },
                     chunk_id=chunk_id
                 ))
+
+        logger.info(f"[CHUNKER] 总分块数: {len(results)}")
+        logger.info(f"[CHUNKER] ----- 分块内容详情 -----")
+        for i, chunk in enumerate(results):
+            logger.info(f"[CHUNKER] 【分块 {i}】")
+            logger.info(f"[CHUNKER]   小块({len(chunk.small_chunk)}字):")
+            # 显示小块完整内容（限制300字）
+            small_content = chunk.small_chunk[:300].replace('\n', '\n[CHUNKER]   ')
+            logger.info(f"[CHUNKER]   {small_content}")
+            if len(chunk.small_chunk) > 300:
+                logger.info(f"[CHUNKER]   ... (省略 {len(chunk.small_chunk) - 300} 字)")
+        logger.info(f"[CHUNKER] ========== 分块结束 ==========")
 
         return results
 

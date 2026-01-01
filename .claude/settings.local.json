@@ -4,7 +4,14 @@
       "Bash(pip install:*)",
       "Bash(.venvScriptspython.exe -m pip install --upgrade \"pydantic>=2.10.0\" \"pydantic-settings>=2.10.0\")",
       "Bash(.venv/Scripts/python.exe -m pip install:*)",
-      "Bash(uv pip install:*)"
+      "Bash(uv pip install:*)",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(cmd.exe /c \"\"\"C:\\\\Program Files\\\\LibreOffice\\\\program\\\\soffice.exe\"\" --version\")",
+      "Bash(powershell.exe -Command \"& ''C:\\\\Program Files\\\\LibreOffice\\\\program\\\\soffice.exe'' --version\")",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

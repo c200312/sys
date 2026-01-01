@@ -13,12 +13,16 @@ class KnowledgeSourceType:
     COURSE = "course"
 
 
+class IndexType(Enum):
+    """索引类型（双索引策略）"""
+    DETAIL = "detail"    # 原文索引，用于细节问题
+    SUMMARY = "summary"  # 摘要索引，用于全局问题
+
+
 class QueryType(Enum):
     """查询类型（用于智能路由）"""
-    FACTUAL = "factual"        # 事实性问题，需要精确匹配
-    CONCEPTUAL = "conceptual"  # 概念性问题，需要理解上下文
-    SUMMARY = "summary"        # 总结性问题，需要大范围检索
-    COMPARISON = "comparison"  # 对比性问题，需要多源检索
+    DETAIL = "detail"      # 细节问题 -> 使用原文索引
+    GLOBAL = "global"      # 全局问题 -> 使用摘要索引
 
 
 # ==================== 分块相关 ====================

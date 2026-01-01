@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     airag_port: int = 8004
     airag_model: str = "gpt-4o"
 
+    # MinerU API 配置 (PDF/DOCX 解析)
+    mineru_api_token: str = ""
+
+    # 阿里云百炼 API 配置 (PPT 图片解析)
+    dashscope_api_key: str = ""
+
     # MinIO 对象存储配置
     minio_endpoint: str = "localhost:9000"
     minio_access_key: str = "minioadmin"

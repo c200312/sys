@@ -46,6 +46,7 @@ pymilvus>=2.3.0
 langchain-milvus
 tiktoken
 chromadb>=0.4.0
+PyMuPDF>=1.24.0  # PDF 转图片
 
 # ============= LlamaIndex 高级检索 =============
 llama-index>=0.10.0

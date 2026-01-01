@@ -101,6 +101,7 @@ Thumbs.db
 *.iml
 .vscode/
 *.code-workspace
+.claude/
 
 # ============= Misc =============
 *.log

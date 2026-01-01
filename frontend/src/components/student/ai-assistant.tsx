@@ -279,11 +279,11 @@ export function StudentAIAssistant({ studentId }: StudentAIAssistantProps) {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const allowedExtensions = ['.pdf', '.docx', '.txt', '.md'];
+    const allowedExtensions = ['.pdf', '.docx', '.txt', '.md', '.ppt', '.pptx'];
     const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
 
     if (!allowedExtensions.includes(fileExtension)) {
-      toast.error('只支持 PDF、DOCX、TXT、MD 格式的文件');
+      toast.error('只支持 PDF、DOCX、PPT、PPTX、TXT、MD 格式的文件');
       return;
     }
 
@@ -655,12 +655,12 @@ export function StudentAIAssistant({ studentId }: StudentAIAssistantProps) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf,.docx,.txt,.md"
+                  accept=".pdf,.docx,.txt,.md,.ppt,.pptx"
                   onChange={handleFileSelect}
                   disabled={uploadingFile}
                   className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50"
                 />
-                <p className="text-xs text-gray-500 mt-2">支持 PDF、DOCX、TXT、MD，最大 10MB</p>
+                <p className="text-xs text-gray-500 mt-2">支持 PDF、DOCX、PPT、TXT、MD，最大 10MB</p>
 
                 {uploadingFile && (
                   <div className="flex items-center gap-2 text-sm text-gray-600 mt-2">

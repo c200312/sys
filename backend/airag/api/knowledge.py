@@ -146,9 +146,13 @@ async def add_knowledge(
         content_bytes = base64.b64decode(content_base64)
         logger.info(f"[KNOWLEDGE] 文件大小: {len(content_bytes)} bytes")
 
-        # 解析文件
+        # 先生成知识库ID（用于图片存储路径）
+        knowledge_id = str(uuid.uuid4())
+        logger.info(f"[KNOWLEDGE] 知识库ID: {knowledge_id}")
+
+        # 解析文件（传入 knowledge_id 用于图片存储）
         logger.info(f"[KNOWLEDGE] 开始解析文件...")
-        text_content = await parse_file_content(req.name, content_bytes)
+        text_content = await parse_file_content(req.name, content_bytes, knowledge_id)
 
         if not text_content.strip():
             logger.error(f"[KNOWLEDGE] 解析结果为空")
@@ -162,10 +166,6 @@ async def add_knowledge(
                 logger.info(f"[KNOWLEDGE]   {line}")
         if len(text_content) > 500:
             logger.info(f"[KNOWLEDGE]   ... (省略 {len(text_content) - 500} 字)")
-
-        # 生成知识库ID
-        knowledge_id = str(uuid.uuid4())
-        logger.info(f"[KNOWLEDGE] 知识库ID: {knowledge_id}")
 
         # 构建元数据
         metadata = {
@@ -222,23 +222,7 @@ async def add_course_resource_to_knowledge(
         content_bytes = await file_content.read()
         logger.info(f"[KNOWLEDGE] 文件大小: {len(content_bytes)} bytes")
 
-        # 解析文件
-        logger.info(f"[KNOWLEDGE] 开始解析文件...")
-        text_content = await parse_file_content(file_name, content_bytes)
-
-        if not text_content.strip():
-            logger.error(f"[KNOWLEDGE] 解析结果为空")
-            return {"success": False, "error": "无法解析文件内容"}
-
-        logger.info(f"[KNOWLEDGE] 解析完成，内容长度: {len(text_content)} 字符")
-        logger.info(f"[KNOWLEDGE] ----- 解析内容预览(前500字) -----")
-        preview_lines = text_content[:500].split('\n')
-        for line in preview_lines:
-            if line.strip():
-                logger.info(f"[KNOWLEDGE]   {line}")
-        if len(text_content) > 500:
-            logger.info(f"[KNOWLEDGE]   ... (省略 {len(text_content) - 500} 字)")
-
+        # 先生成知识库ID（用于图片存储路径）
         knowledge_id = f"course_{course_id}_{file_id}"
         logger.info(f"[KNOWLEDGE] 知识库ID: {knowledge_id}")
 
@@ -253,6 +237,23 @@ async def add_course_resource_to_knowledge(
                 "name": file_name,
                 "message": "该资源已在知识库中"
             }
+
+        # 解析文件（传入 knowledge_id 用于图片存储）
+        logger.info(f"[KNOWLEDGE] 开始解析文件...")
+        text_content = await parse_file_content(file_name, content_bytes, knowledge_id)
+
+        if not text_content.strip():
+            logger.error(f"[KNOWLEDGE] 解析结果为空")
+            return {"success": False, "error": "无法解析文件内容"}
+
+        logger.info(f"[KNOWLEDGE] 解析完成，内容长度: {len(text_content)} 字符")
+        logger.info(f"[KNOWLEDGE] ----- 解析内容预览(前500字) -----")
+        preview_lines = text_content[:500].split('\n')
+        for line in preview_lines:
+            if line.strip():
+                logger.info(f"[KNOWLEDGE]   {line}")
+        if len(text_content) > 500:
+            logger.info(f"[KNOWLEDGE]   ... (省略 {len(text_content) - 500} 字)")
 
         # 构建元数据
         metadata = {

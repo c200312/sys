@@ -5,6 +5,7 @@ RAG 聊天 API
 - 细节问题 -> Detail Index（原文分块）
 - 全局问题 -> Summary Index（文档摘要）
 """
+import re
 import logging
 from typing import Optional, List
 
@@ -18,20 +19,57 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
+
+def _convert_minio_urls(text: str) -> str:
+    """
+    将文本中的 minio:// URL 转换为预签名 URL
+
+    匹配格式：![description](minio://object_name)
+    转换为：![description](https://presigned-url)
+
+    Args:
+        text: 包含 minio:// URL 的文本
+
+    Returns:
+        转换后的文本
+    """
+    if "minio://" not in text:
+        return text
+
+    try:
+        from app.services.minio_service import get_minio_service
+        minio_service = get_minio_service()
+    except Exception as e:
+        logger.warning(f"[CHAT] MinIO 服务不可用，无法转换图片 URL: {e}")
+        return text
+
+    # 匹配 ![...](minio://...) 格式
+    pattern = r'!\[([^\]]*)\]\(minio://([^)]+)\)'
+
+    def replace_url(match):
+        alt_text = match.group(1)
+        object_name = match.group(2)
+        try:
+            presigned_url = minio_service.get_presigned_url(object_name, expires=3600)
+            logger.info(f"[CHAT] 转换图片 URL: minio://{object_name} -> presigned URL")
+            return f"![{alt_text}]({presigned_url})"
+        except Exception as e:
+            logger.warning(f"[CHAT] 获取预签名 URL 失败 [{object_name}]: {e}")
+            return match.group(0)  # 保持原样
+
+    return re.sub(pattern, replace_url, text)
+
 # 系统提示词模板
-SYSTEM_PROMPT_WITH_SOURCES = """你是一个专业的学习助手，根据提供的知识库资料回答用户的问题。
+SYSTEM_PROMPT_WITH_SOURCES = """你是一个专业的学习助手。
 
 回答要求：
-1. 只基于提供的资料内容进行回答，不要编造信息
-2. 如果资料中没有相关内容，诚实地告诉用户
+1. 基于提供的资料内容回答，不要编造信息
+2. 如果资料中没有相关内容，诚实告知用户
 3. 回答要清晰、准确、有条理
-4. 【重要】在引用资料内容时，必须在相关内容后面添加角标标注来源，格式为 [1]、[2] 等
-5. 可以同时引用多个来源，如 [1][2]
+4. 【重要】在引用内容后添加角标标注来源，格式为 [1]、[2] 等
+5. 可同时引用多个来源，如 [1][2]
 6. 使用中文回答
-
-角标示例：
-- "根据资料显示，该算法的时间复杂度为O(n)[1]。"
-- "研究表明这种方法可以提高效率[2][3]。"
+7. 直接回答问题，不要以"根据资料"、"根据提供的资料"等开头
 """
 
 SYSTEM_PROMPT_NO_SOURCES = """你是一个专业的学习助手，友好地回答用户的问题。
@@ -124,6 +162,11 @@ async def chat(
         # 过滤未被引用的 sources（只保留回答中实际引用的）并重新映射编号
         answer, used_sources = _filter_used_sources(answer, sources)
         logger.info(f"[CHAT] 引用过滤: {len(sources)} -> {len(used_sources)} 个来源")
+
+        # 转换 sources 中的 minio:// URL 为预签名 URL
+        for source in used_sources:
+            source.content = _convert_minio_urls(source.content)
+
         logger.info(f"[CHAT] ========== 问答请求结束 ==========")
 
         return ChatResponse(

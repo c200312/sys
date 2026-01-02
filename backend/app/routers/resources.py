@@ -86,7 +86,8 @@ async def add_to_rag_knowledge(
             'x-user-id': user_id
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        # PDF/PPT 使用 VLM 解析可能需要较长时间，设置 10 分钟超时
+        async with httpx.AsyncClient(timeout=600.0) as client:
             response = await client.post(
                 f"{rag_url}/knowledge/add-from-course",
                 files=files,

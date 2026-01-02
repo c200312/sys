@@ -89,6 +89,62 @@ function parseMessageWithCitations(
   return parts;
 }
 
+// 解析内容中的 Markdown 图片和文本
+function parseContentWithImages(content: string): React.ReactNode[] {
+  // 匹配 Markdown 图片语法 ![alt](url)
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = imageRegex.exec(content)) !== null) {
+    // 添加图片前的文本
+    if (match.index > lastIndex) {
+      parts.push(
+        <span key={`text-${lastIndex}`} className="whitespace-pre-wrap">
+          {content.slice(lastIndex, match.index)}
+        </span>
+      );
+    }
+
+    const altText = match[1];
+    const imageUrl = match[2];
+
+    // 添加图片元素
+    parts.push(
+      <div key={`img-${match.index}`} className="my-3">
+        <img
+          src={imageUrl}
+          alt={altText}
+          className="max-w-full h-auto rounded-lg border border-gray-200 shadow-sm"
+          onError={(e) => {
+            // 图片加载失败时显示占位符
+            const target = e.target as HTMLImageElement;
+            target.style.display = 'none';
+            target.parentElement!.innerHTML = `<div class="p-3 bg-gray-100 rounded-lg text-gray-500 text-sm">图片加载失败: ${altText}</div>`;
+          }}
+        />
+        {altText && (
+          <p className="text-xs text-gray-500 mt-1 text-center">{altText}</p>
+        )}
+      </div>
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // 添加剩余文本
+  if (lastIndex < content.length) {
+    parts.push(
+      <span key={`text-${lastIndex}`} className="whitespace-pre-wrap">
+        {content.slice(lastIndex)}
+      </span>
+    );
+  }
+
+  return parts.length > 0 ? parts : [content];
+}
+
 // 源引用弹窗组件
 function SourcePopup({
   source,
@@ -99,6 +155,8 @@ function SourcePopup({
   index: number;
   onClose: () => void;
 }) {
+  const parsedContent = parseContentWithImages(source.content);
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
       <div
@@ -128,9 +186,9 @@ function SourcePopup({
 
         {/* 内容 */}
         <div className="flex-1 overflow-y-auto p-4">
-          <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-            {source.content}
-          </p>
+          <div className="text-sm text-gray-700 leading-relaxed">
+            {parsedContent}
+          </div>
         </div>
       </div>
     </div>

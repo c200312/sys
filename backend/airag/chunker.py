@@ -102,7 +102,7 @@ class HierarchicalChunker:
 
     def _split_into_chunks(self, text: str, chunk_size: int) -> List[str]:
         """
-        智能分块：优先按段落分割，超长段落按句子分割
+        语义感知分块：优先按 Markdown 标题分割，然后按段落分割
 
         Args:
             text: 文本内容
@@ -111,33 +111,123 @@ class HierarchicalChunker:
         Returns:
             分块列表
         """
-        # 按段落分割
-        paragraphs = text.split('\n\n')
+        # 先按语义单元解析
+        semantic_units = self._parse_semantic_units(text)
         chunks = []
         current_chunk = ""
 
-        for para in paragraphs:
-            para = para.strip()
-            if not para:
-                continue
+        for unit in semantic_units:
+            unit_text = unit["text"]
+            unit_type = unit["type"]
 
-            if len(current_chunk) + len(para) + 2 <= chunk_size:
-                current_chunk += ("\n\n" if current_chunk else "") + para
+            # 主要标题（## 及以上）强制作为新块的开始
+            is_major_heading = (
+                unit_type == "heading" and
+                unit.get("level", 99) <= 2
+            )
+
+            if is_major_heading and current_chunk.strip():
+                # 遇到主要标题，先保存当前块
+                chunks.append(current_chunk.strip())
+                current_chunk = unit_text + "\n\n"
+            elif len(current_chunk) + len(unit_text) + 2 <= chunk_size:
+                # 累积到当前块
+                current_chunk += ("\n\n" if current_chunk else "") + unit_text
             else:
-                if current_chunk:
-                    chunks.append(current_chunk)
-                # 如果单个段落超长，按句子分割
-                if len(para) > chunk_size:
-                    sentence_chunks = self._split_by_sentences(para, chunk_size)
+                # 当前块已满，保存并开始新块
+                if current_chunk.strip():
+                    chunks.append(current_chunk.strip())
+                # 如果单个单元超长，按句子分割
+                if len(unit_text) > chunk_size:
+                    sentence_chunks = self._split_by_sentences(unit_text, chunk_size)
                     chunks.extend(sentence_chunks)
                     current_chunk = ""
                 else:
-                    current_chunk = para
+                    current_chunk = unit_text
 
-        if current_chunk:
-            chunks.append(current_chunk)
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
 
         return chunks if chunks else [text]
+
+    def _parse_semantic_units(self, text: str) -> List[Dict[str, Any]]:
+        """
+        解析文本为语义单元列表
+
+        识别：
+        - 标题（# ## ### 等）
+        - 列表块（连续的 - * 或数字列表）
+        - 普通段落
+
+        Returns:
+            语义单元列表，每个单元包含 type, text, level(可选)
+        """
+        units = []
+        lines = text.split('\n')
+        current_unit = {"type": "paragraph", "text": ""}
+        in_list = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            # 空行：结束当前单元
+            if not stripped:
+                if current_unit["text"].strip():
+                    units.append(current_unit)
+                current_unit = {"type": "paragraph", "text": ""}
+                in_list = False
+                continue
+
+            # 检测标题
+            heading_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
+            if heading_match:
+                # 保存之前的单元
+                if current_unit["text"].strip():
+                    units.append(current_unit)
+                # 创建标题单元
+                level = len(heading_match.group(1))
+                units.append({
+                    "type": "heading",
+                    "level": level,
+                    "text": stripped
+                })
+                current_unit = {"type": "paragraph", "text": ""}
+                in_list = False
+                continue
+
+            # 检测列表项
+            list_match = re.match(r'^[-*]\s+|^\d+\.\s+', stripped)
+            if list_match:
+                if not in_list:
+                    # 开始新列表，保存之前的段落
+                    if current_unit["text"].strip():
+                        units.append(current_unit)
+                    current_unit = {"type": "list", "text": stripped}
+                    in_list = True
+                else:
+                    # 继续列表
+                    current_unit["text"] += "\n" + stripped
+                continue
+
+            # 普通文本
+            if in_list:
+                # 列表结束，开始新段落
+                if current_unit["text"].strip():
+                    units.append(current_unit)
+                current_unit = {"type": "paragraph", "text": stripped}
+                in_list = False
+            else:
+                # 累积到当前段落
+                if current_unit["text"]:
+                    current_unit["text"] += "\n" + stripped
+                else:
+                    current_unit["text"] = stripped
+
+        # 保存最后一个单元
+        if current_unit["text"].strip():
+            units.append(current_unit)
+
+        return units
 
     def _split_by_sentences(self, text: str, chunk_size: int) -> List[str]:
         """

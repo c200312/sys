@@ -160,7 +160,12 @@ class HybridRetriever:
         """
         从摘要索引检索（纯向量）
 
-        检索块级摘要，但返回 original_chunk（原始块内容）用于前端引用展示
+        检索块级摘要，聚合同一文档的相关块，返回完整上下文
+
+        策略：
+        1. 检索 top_k * 2 个摘要结果
+        2. 按文档分组，聚合同一文档的多个相关块
+        3. 返回聚合后的内容（最多 top_k 个文档）
 
         Args:
             query: 查询文本
@@ -169,43 +174,92 @@ class HybridRetriever:
             vector_weight: 向量权重
 
         Returns:
-            检索结果（文档内容为原始块，而非摘要）
+            检索结果（聚合后的文档内容）
         """
-        logger.info(f"[RETRIEVER] ----- 摘要索引检索 -----")
+        logger.info(f"[RETRIEVER] ----- 摘要索引检索（聚合模式） -----")
 
         filter_condition = {"knowledge_id": {"$in": knowledge_ids}} if knowledge_ids else None
 
         try:
+            # 多检索一些用于聚合
             results = self.summary_chroma.similarity_search_with_score(
                 query=query,
-                k=top_k,
+                k=top_k * 3,
                 filter=filter_condition
             )
 
-            final_results = []
-            for doc, score in results:
-                # 转换分数（ChromaDB 返回的是距离，越小越好）
-                normalized_score = (1 / (1 + score)) * vector_weight
+            logger.info(f"[RETRIEVER] 摘要检索原始结果: {len(results)} 条")
 
-                # 用原始块内容替换摘要，用于前端引用展示
+            # 按知识库ID分组聚合
+            doc_groups = {}  # knowledge_id -> { chunks: [...], max_score: float, metadata: dict }
+
+            for doc, score in results:
+                kid = doc.metadata.get("knowledge_id", "unknown")
+                normalized_score = (1 / (1 + score)) * vector_weight
                 original_chunk = doc.metadata.get("original_chunk", doc.page_content)
+                chunk_idx = doc.metadata.get("chunk_index", 0)
+
+                if kid not in doc_groups:
+                    doc_groups[kid] = {
+                        "chunks": [],
+                        "max_score": normalized_score,
+                        "metadata": doc.metadata,
+                        "summaries": []
+                    }
+
+                # 更新最高分
+                if normalized_score > doc_groups[kid]["max_score"]:
+                    doc_groups[kid]["max_score"] = normalized_score
+
+                # 添加块（避免重复）
+                existing_indices = [c["index"] for c in doc_groups[kid]["chunks"]]
+                if chunk_idx not in existing_indices:
+                    summary_text = doc.page_content  # 摘要内容
+                    doc_groups[kid]["chunks"].append({
+                        "index": chunk_idx,
+                        "content": original_chunk,
+                        "summary": summary_text,
+                        "score": normalized_score
+                    })
+                    doc_groups[kid]["summaries"].append(summary_text)
+                    logger.info(f"[RETRIEVER] 块{chunk_idx} 摘要: {summary_text[:150]}...")
+
+            logger.info(f"[RETRIEVER] 聚合后文档数: {len(doc_groups)}")
+
+            # 按最高分排序文档
+            sorted_docs = sorted(
+                doc_groups.items(),
+                key=lambda x: x[1]["max_score"],
+                reverse=True
+            )[:top_k]
+
+            final_results = []
+            for kid, group in sorted_docs:
+                # 按块索引排序，保持文档顺序
+                sorted_chunks = sorted(group["chunks"], key=lambda x: x["index"])
+
+                # 聚合块内容
+                aggregated_content = "\n\n".join([c["content"] for c in sorted_chunks])
+
+                name = group["metadata"].get("name", "unknown")
+                logger.info(f"[RETRIEVER] 聚合文档: {name} (kid={kid})")
+                logger.info(f"[RETRIEVER]   包含 {len(sorted_chunks)} 个块: {[c['index'] for c in sorted_chunks]}")
+                logger.info(f"[RETRIEVER]   最高分: {group['max_score']:.4f}")
+                logger.info(f"[RETRIEVER]   聚合内容长度: {len(aggregated_content)} 字符")
+                logger.info(f"[RETRIEVER]   内容预览: {aggregated_content[:200]}...")
+
                 result_doc = LCDocument(
-                    page_content=original_chunk,  # 返回原始块内容
+                    page_content=aggregated_content,
                     metadata={
-                        **doc.metadata,
-                        "summary": doc.page_content,  # 保留摘要供调试
+                        **group["metadata"],
+                        "aggregated_chunks": len(sorted_chunks),
+                        "chunk_indices": [c["index"] for c in sorted_chunks],
+                        "summaries": group["summaries"],
                     }
                 )
-                final_results.append((result_doc, normalized_score))
+                final_results.append((result_doc, group["max_score"]))
 
-                name = doc.metadata.get("name", "unknown")
-                kid = doc.metadata.get("knowledge_id", "unknown")
-                chunk_idx = doc.metadata.get("chunk_index", 0)
-                logger.info(f"[RETRIEVER] 摘要结果: {name} 块{chunk_idx} (kid={kid}, score={normalized_score:.4f})")
-                logger.info(f"[RETRIEVER]   摘要: {doc.page_content[:100]}...")
-                logger.info(f"[RETRIEVER]   原文: {original_chunk[:100]}...")
-
-            logger.info(f"[RETRIEVER] ========== 摘要检索结束: {len(final_results)} 条 ==========")
+            logger.info(f"[RETRIEVER] ========== 摘要检索结束: {len(final_results)} 个聚合文档 ==========")
             return final_results
 
         except Exception as e:

@@ -130,12 +130,13 @@ class DocumentSummarizer:
 
     def _split_content(self, content: str) -> List[str]:
         """
-        按语义边界分块：优先保持段落完整
+        按语义边界分块：识别 Markdown 结构
 
         策略：
-        1. 按段落分割
-        2. 合并小段落直到接近 chunk_size
-        3. 超长段落按句子分割，不硬截断
+        1. 识别 Markdown 语义单元（标题、列表、代码块、表格、段落）
+        2. 标题（## 及以上）强制作为分块边界
+        3. 合并小单元直到接近 chunk_size
+        4. 超长单元按句子分割
 
         Args:
             content: 原始内容
@@ -143,30 +144,53 @@ class DocumentSummarizer:
         Returns:
             块列表
         """
-        chunks = []
-        # 按段落分割（支持单换行和双换行）
-        paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+        import re
 
+        # 先识别语义单元
+        semantic_units = self._parse_semantic_units(content)
+        logger.info(f"[SUMMARIZER] 识别到 {len(semantic_units)} 个语义单元")
+
+        # 合并小单元成块
+        chunks = []
         current_chunk = ""
-        for para in paragraphs:
-            # 如果当前块加上这个段落不超限，合并
-            if len(current_chunk) + len(para) + 2 <= self.chunk_size:
-                current_chunk += para + "\n\n"
+
+        for unit in semantic_units:
+            unit_text = unit["text"]
+            unit_type = unit["type"]
+
+            # 主要标题（## 及以上）强制作为新块的开始
+            is_major_heading = (
+                unit_type == "heading" and
+                unit.get("level", 99) <= 2
+            )
+
+            if is_major_heading and current_chunk.strip():
+                # 保存当前块，开始新块
+                chunks.append(current_chunk.strip())
+                current_chunk = unit_text + "\n\n"
+                continue
+
+            # 如果当前块加上这个单元不超限，合并
+            if len(current_chunk) + len(unit_text) + 2 <= self.chunk_size:
+                current_chunk += unit_text + "\n\n"
             else:
                 # 先保存当前块
                 if current_chunk.strip():
                     chunks.append(current_chunk.strip())
                     current_chunk = ""
 
-                # 处理当前段落
-                if len(para) <= self.chunk_size:
-                    # 段落不超限，作为新块的开始
-                    current_chunk = para + "\n\n"
+                # 处理当前单元
+                if len(unit_text) <= self.chunk_size:
+                    current_chunk = unit_text + "\n\n"
                 else:
-                    # 超长段落：按句子分割
-                    sub_chunks = self._split_long_paragraph(para)
-                    chunks.extend(sub_chunks[:-1])  # 前面的块直接加入
-                    current_chunk = sub_chunks[-1] + "\n\n" if sub_chunks else ""
+                    # 超长单元：按句子分割（但保留代码块和表格完整）
+                    if unit_type in ("code_block", "table"):
+                        # 代码块和表格不分割，直接作为一块
+                        chunks.append(unit_text)
+                    else:
+                        sub_chunks = self._split_long_paragraph(unit_text)
+                        chunks.extend(sub_chunks[:-1])
+                        current_chunk = sub_chunks[-1] + "\n\n" if sub_chunks else ""
 
         # 处理最后一个块
         if current_chunk.strip():
@@ -177,6 +201,135 @@ class DocumentSummarizer:
             chunks = [content]
 
         return chunks
+
+    def _parse_semantic_units(self, content: str) -> List[dict]:
+        """
+        解析 Markdown 语义单元
+
+        识别的结构：
+        - 标题（# 开头，单独作为一个单元）
+        - 代码块（```...```）
+        - 表格（| 开头的多行）
+        - 列表块（连续的 - 或 * 或数字.）
+        - 图片（![...](...)）
+        - 普通段落
+
+        Returns:
+            语义单元列表，每个元素 {"type": str, "text": str, ...}
+        """
+        import re
+
+        units = []
+        lines = content.split('\n')
+        i = 0
+        n = len(lines)
+
+        while i < n:
+            line = lines[i]
+
+            # 跳过空行
+            if not line.strip():
+                i += 1
+                continue
+
+            # 代码块: ```
+            if line.strip().startswith('```'):
+                code_lines = [line]
+                i += 1
+                while i < n and not lines[i].strip().startswith('```'):
+                    code_lines.append(lines[i])
+                    i += 1
+                if i < n:
+                    code_lines.append(lines[i])
+                    i += 1
+                units.append({
+                    "type": "code_block",
+                    "text": '\n'.join(code_lines)
+                })
+                continue
+
+            # 表格: | 开头
+            if line.strip().startswith('|'):
+                table_lines = []
+                while i < n and lines[i].strip().startswith('|'):
+                    table_lines.append(lines[i])
+                    i += 1
+                units.append({
+                    "type": "table",
+                    "text": '\n'.join(table_lines)
+                })
+                continue
+
+            # 标题: # 开头（单独作为一个单元，不包含后续内容）
+            heading_match = re.match(r'^(#{1,6})\s+(.+)$', line.strip())
+            if heading_match:
+                heading_level = len(heading_match.group(1))
+                units.append({
+                    "type": "heading",
+                    "level": heading_level,
+                    "text": line.strip()
+                })
+                i += 1
+                continue
+
+            # 图片: ![...](...)
+            img_match = re.match(r'^!\[.*\]\(.*\)$', line.strip())
+            if img_match:
+                units.append({
+                    "type": "image",
+                    "text": line.strip()
+                })
+                i += 1
+                continue
+
+            # 列表: - 或 * 或 数字. 开头
+            list_match = re.match(r'^(\s*[-*]|\s*\d+\.)\s+', line)
+            if list_match:
+                list_lines = []
+                while i < n:
+                    cur = lines[i]
+                    # 列表项或缩进的延续行
+                    if re.match(r'^(\s*[-*]|\s*\d+\.)\s+', cur) or (cur.startswith('  ') and list_lines):
+                        list_lines.append(cur)
+                        i += 1
+                    elif not cur.strip():
+                        # 空行可能是列表内的分隔
+                        if i + 1 < n and re.match(r'^(\s*[-*]|\s*\d+\.)\s+', lines[i + 1]):
+                            list_lines.append(cur)
+                            i += 1
+                        else:
+                            break
+                    else:
+                        break
+                units.append({
+                    "type": "list",
+                    "text": '\n'.join(list_lines).strip()
+                })
+                continue
+
+            # 普通段落：收集直到空行或特殊结构
+            para_lines = []
+            while i < n:
+                cur = lines[i]
+                if not cur.strip():
+                    break
+                if cur.strip().startswith('```') or cur.strip().startswith('|'):
+                    break
+                if re.match(r'^#{1,6}\s+', cur.strip()):
+                    break
+                if re.match(r'^(\s*[-*]|\s*\d+\.)\s+', cur):
+                    break
+                if re.match(r'^!\[.*\]\(.*\)$', cur.strip()):
+                    break
+                para_lines.append(cur)
+                i += 1
+            if para_lines:
+                units.append({
+                    "type": "paragraph",
+                    "text": '\n'.join(para_lines).strip()
+                })
+
+        return units
 
     def _split_long_paragraph(self, paragraph: str) -> List[str]:
         """

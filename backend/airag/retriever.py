@@ -307,32 +307,51 @@ class HybridRetriever:
         scored_results = []
         for doc_id, data in results.items():
             total_score = data["vector_score"] + data["bm25_score"]
-            scored_results.append((data["doc"], total_score))
+            scored_results.append((data["doc"], total_score, data["vector_score"], data["bm25_score"]))
 
         scored_results.sort(key=lambda x: x[1], reverse=True)
-        final_results = scored_results[:top_k]
+
+        # 4. 去重：相同 large_chunk 只保留分数最高的
+        seen_large_chunks = set()
+        deduped_results = []
+        for doc, total_score, vector_score, bm25_score in scored_results:
+            # 用 large_chunk 的前 100 字符 + 文件名作为去重 key
+            large_chunk = doc.metadata.get("large_chunk", doc.page_content)
+            dedup_key = (doc.metadata.get("name", ""), large_chunk[:100] if large_chunk else "")
+
+            if dedup_key in seen_large_chunks:
+                logger.info(f"[RETRIEVER] 跳过重复大块: {doc.metadata.get('name', '未知')[:30]}")
+                continue
+
+            seen_large_chunks.add(dedup_key)
+            deduped_results.append((doc, total_score, vector_score, bm25_score))
+
+            if len(deduped_results) >= top_k:
+                break
+
+        logger.info(f"[RETRIEVER] 去重后结果: {len(scored_results)} -> {len(deduped_results)} 条")
 
         # 日志输出
-        logger.info(f"[RETRIEVER] ========== 最终结果: {len(final_results)} 条 ==========")
-        for i, (doc, score) in enumerate(final_results):
+        logger.info(f"[RETRIEVER] ========== 最终结果: {len(deduped_results)} 条 ==========")
+        final_results = []
+        for i, (doc, total_score, vector_score, bm25_score) in enumerate(deduped_results):
             name = doc.metadata.get("name", "unknown")
             kid = doc.metadata.get("knowledge_id", "unknown")
-            doc_id = doc.metadata.get('chunk_id') or \
-                f"{kid}_{doc.metadata.get('large_chunk_index', 0)}_{doc.metadata.get('small_chunk_index', 0)}"
-            vector_score = results.get(doc_id, {}).get("vector_score", 0)
-            bm25_score = results.get(doc_id, {}).get("bm25_score", 0)
             content_preview = doc.page_content[:200].replace('\n', ' ')
             large_chunk = doc.metadata.get("large_chunk", "")
             large_preview = large_chunk[:200].replace('\n', ' ') if large_chunk else "(无大块)"
             logger.info(f"[RETRIEVER] ----- 结果 {i+1} -----")
             logger.info(f"[RETRIEVER] 文件: {name}")
             logger.info(f"[RETRIEVER] 知识库ID: {kid}")
-            logger.info(f"[RETRIEVER] 综合分数: {score:.4f} (向量={vector_score:.3f}, BM25={bm25_score:.3f})")
+            logger.info(f"[RETRIEVER] 综合分数: {total_score:.4f} (向量={vector_score:.3f}, BM25={bm25_score:.3f})")
             logger.info(f"[RETRIEVER] 小块内容({len(doc.page_content)}字):")
             logger.info(f"[RETRIEVER]   {content_preview}")
             if use_large_chunk and large_chunk:
                 logger.info(f"[RETRIEVER] 大块内容({len(large_chunk)}字):")
                 logger.info(f"[RETRIEVER]   {large_preview}")
+
+            final_results.append((doc, total_score))
+
         logger.info(f"[RETRIEVER] ========== 检索结束 ==========")
 
         return final_results

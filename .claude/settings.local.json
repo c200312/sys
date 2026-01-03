@@ -11,7 +11,14 @@
       "Bash(curl:*)",
       "Bash(python:*)",
       "Bash(netstat:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(cat \"d:/project/sys/backend/Main_API.log\")",
+      "Bash(cat \"d:/project/sys/frontend/frontend.log\")",
+      "Bash(echo \"OSTYPE=$OSTYPE\")",
+      "Bash([[ \"$OSTYPE\" == \"msys\")",
+      "Bash(\"$OSTYPE\" == \"cygwin\")",
+      "Bash(\"$OS\" == \"Windows_NT\" ]])",
+      "Bash(echo \"OS=$OS\")"
     ]
   }
 }

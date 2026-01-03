@@ -13,15 +13,25 @@ os.environ["PYDANTIC_V2_MODE"] = "1"
 os.environ["ANONYMIZED_TELEMETRY"] = "False"  # 禁用 ChromaDB 遥测
 
 import logging
+import sys
 
 # 禁用 ChromaDB posthog 遥测的错误日志
 logging.getLogger("chromadb.telemetry.product.posthog").setLevel(logging.CRITICAL)
 
-# 配置日志
+# 配置日志（强制 UTF-8 编码）
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(stream=sys.stdout)
+    ]
 )
+
+# 设置 stdout 编码为 UTF-8（Windows 兼容）
+if sys.platform == 'win32':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 logger = logging.getLogger(__name__)
 
 # 降低第三方库日志级别

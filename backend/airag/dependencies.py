@@ -17,6 +17,7 @@ from .retriever import HybridRetriever
 from .router import QueryRouter
 from .chunker import HierarchicalChunker
 from .summarizer import DocumentSummarizer
+from .reranker import LLMReranker
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class Dependencies:
     _query_router = None
     _chunker = HierarchicalChunker()
     _summarizer = None
+    _reranker = None
 
     @classmethod
     def get_embeddings(cls, api_key: str = None) -> OpenAIEmbeddings:
@@ -206,6 +208,15 @@ class Dependencies:
         cls._summarizer = DocumentSummarizer(llm)
         return cls._summarizer
 
+    @classmethod
+    def get_reranker(cls) -> LLMReranker:
+        """获取重排序器"""
+        if cls._reranker:
+            return cls._reranker
+
+        cls._reranker = LLMReranker()
+        return cls._reranker
+
 
 # 便捷函数
 def get_embeddings(api_key: str = None) -> OpenAIEmbeddings:
@@ -245,6 +256,10 @@ def get_chunker() -> HierarchicalChunker:
 
 def get_summarizer() -> DocumentSummarizer:
     return Dependencies.get_summarizer()
+
+
+def get_reranker() -> LLMReranker:
+    return Dependencies.get_reranker()
 
 
 def rebuild_bm25_index():

@@ -68,6 +68,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.pids
+nul
 
 # Editor directories and files
 .vscode/*

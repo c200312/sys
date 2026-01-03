@@ -13,6 +13,11 @@ def setup_logging():
     """配置日志"""
     log_level = logging.DEBUG if settings.debug else logging.INFO
 
+    # 设置 stdout/stderr 编码为 UTF-8（Windows 兼容）
+    if sys.platform == 'win32':
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
     # 配置根日志
     logging.basicConfig(
         level=log_level,

@@ -13,7 +13,7 @@ from fastapi import APIRouter, Header
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..models import ChatRequest, ChatResponse, SourceItem, IndexType
-from ..dependencies import get_llm, get_hybrid_retriever, get_query_router
+from ..dependencies import get_llm, get_hybrid_retriever, get_query_router, get_reranker
 
 logger = logging.getLogger(__name__)
 
@@ -63,17 +63,21 @@ def _convert_minio_urls(text: str) -> str:
 SYSTEM_PROMPT_WITH_SOURCES = """你是一个专业的学习助手。
 
 回答要求：
-1. 基于提供的资料内容回答，不要编造信息
-2. 如果资料中没有相关内容，诚实告知用户
+1. 基于提供的资料回答问题
+2. 在引用内容后添加角标 [1]、[2] 等
 3. 回答要清晰、准确、有条理
-4. 【重要】在引用内容后添加角标标注来源，格式为 [1]、[2] 等
-5. 可同时引用多个来源，如 [1][2]
-6. 使用中文回答
-7. 直接回答问题，不要以"根据资料"、"根据提供的资料"等开头
+4. 使用中文回答
+5. 直接回答问题，不要以"根据资料"等开头
 """
 
-SYSTEM_PROMPT_NO_SOURCES = """你是一个专业的学习助手，友好地回答用户的问题。
-使用中文回答。如果问题需要特定的资料，建议用户添加相关知识库。"""
+SYSTEM_PROMPT_NO_SOURCES = """你是一个专业的学习助手。
+使用中文回答用户的问题。"""
+
+# 相关性分数阈值（向量检索初筛）：低于此分数的结果直接过滤
+RELEVANCE_THRESHOLD = 0.35
+
+# 重排序相关性阈值：使用 LLM 重排序后，低于此分数视为不相关
+RERANK_THRESHOLD = 0.5
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -115,10 +119,42 @@ async def chat(
 
         if req.knowledge_ids:
             logger.info(f"[CHAT] 开始检索...")
-            sources = _retrieve_sources(
+            sources, raw_results = _retrieve_sources(
                 req.message, req.knowledge_ids, index_type, retrieval_params, retrieval_info
             )
-            logger.info(f"[CHAT] ========== 检索结果: {len(sources)} 条资料 ==========")
+
+            # 向量检索初筛：过滤低相关性结果
+            original_count = len(sources)
+            sources = [s for s in sources if s.score >= RELEVANCE_THRESHOLD]
+            filtered_count = original_count - len(sources)
+
+            if filtered_count > 0:
+                logger.info(f"[CHAT] 向量初筛: {original_count} -> {len(sources)} (阈值={RELEVANCE_THRESHOLD})")
+
+            # 重排序：使用 Rerank 模型判断真实相关性
+            if sources and raw_results:
+                logger.info(f"[CHAT] 开始重排序...")
+                reranker = get_reranker()
+                # 只对通过初筛的文档进行重排序
+                filtered_raw = [(doc, score) for doc, score in raw_results if score >= RELEVANCE_THRESHOLD]
+                rerank_results = reranker.rerank(req.message, filtered_raw)
+
+                # 重新构建 sources 列表，只保留重排序后相关的文档
+                reranked_sources = []
+                for result in rerank_results:
+                    doc = result.document
+                    content = doc.metadata.get("large_chunk", doc.page_content)
+                    reranked_sources.append(SourceItem(
+                        name=doc.metadata.get("name", "未知来源"),
+                        content=content,
+                        course_name=doc.metadata.get("course_name"),
+                        score=round(result.rerank_score, 4)
+                    ))
+
+                logger.info(f"[CHAT] 重排序结果: {len(sources)} -> {len(reranked_sources)} 条相关资料")
+                sources = reranked_sources
+
+            logger.info(f"[CHAT] ========== 检索结果: {len(sources)} 条相关资料 ==========")
             for i, src in enumerate(sources):
                 logger.info(f"[CHAT] ----- 资料 {i+1} -----")
                 logger.info(f"[CHAT] 来源: {src.name}")
@@ -187,7 +223,7 @@ def _retrieve_sources(
     index_type: IndexType,
     retrieval_params: dict,
     retrieval_info: dict
-) -> List[SourceItem]:
+) -> tuple[List[SourceItem], list]:
     """
     检索相关源数据
 
@@ -199,7 +235,7 @@ def _retrieve_sources(
         retrieval_info: 检索信息（用于调试）
 
     Returns:
-        源数据列表
+        (源数据列表, 原始检索结果列表) - 原始结果用于重排序
     """
     sources = []
 
@@ -241,7 +277,7 @@ def _retrieve_sources(
                 score=round(score, 4)
             ))
 
-    return sources
+    return sources, results
 
 
 def _filter_used_sources(answer: str, sources: List[SourceItem]) -> tuple[str, List[SourceItem]]:

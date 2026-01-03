@@ -107,10 +107,10 @@ do_start() {
     # 设置 Python 路径（Windows vs Linux）
     if [ "$IS_WINDOWS" = true ]; then
         PYTHON_CMD="$BACKEND_DIR/.venv/Scripts/python.exe"
-        NPM_CMD="npm.cmd"
+        NPM_CMD="pnpm.cmd"
     else
         PYTHON_CMD="$BACKEND_DIR/.venv/bin/python"
-        NPM_CMD="npm"
+        NPM_CMD="pnpm"
     fi
 
     # 加载环境变量
@@ -141,7 +141,9 @@ do_start() {
     # 启动前端
     echo -e "[*] 启动前端服务..."
     cd "$FRONTEND_DIR"
-    $NPM_CMD run dev > "$LOG_DIR/frontend.log" 2>&1 &
+    pnpm -v || npm install -g pnpm
+    [ ! -d "node_modules" ] && pnpm install
+    $PNPM_CMD run dev > "$LOG_DIR/frontend.log" 2>&1 &
     echo $! >> "$PID_FILE"
     echo -e "    ${GREEN}Frontend${NC} -> http://localhost:$FRONTEND_PORT"
 

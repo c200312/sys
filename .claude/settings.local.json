@@ -18,7 +18,10 @@
       "Bash([[ \"$OSTYPE\" == \"msys\")",
       "Bash(\"$OSTYPE\" == \"cygwin\")",
       "Bash(\"$OS\" == \"Windows_NT\" ]])",
-      "Bash(echo \"OS=$OS\")"
+      "Bash(echo \"OS=$OS\")",
+      "Bash(bash start.sh status)",
+      "Bash(bash d:/project/sys/start.sh stop)",
+      "Bash(bash d:/project/sys/start.sh start)"
     ]
   }
 }

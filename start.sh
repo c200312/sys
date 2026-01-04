@@ -47,10 +47,15 @@ print_header() {
 kill_port() {
     local port=$1
     if [ "$IS_WINDOWS" = true ]; then
-        # Windows: 使用 netstat + taskkill
-        for pid in $(netstat -ano 2>/dev/null | grep ":$port" | grep "LISTENING" | awk '{print $5}' | sort -u); do
+        # Windows: 使用 netstat + taskkill (通过 cmd.exe 调用以确保兼容性)
+        local pids=$(netstat -ano 2>/dev/null | grep ":$port " | grep "LISTENING" | awk '{print $5}' | sort -u)
+        for pid in $pids; do
             if [ -n "$pid" ] && [ "$pid" != "0" ]; then
-                taskkill //F //PID "$pid" >/dev/null 2>&1
+                # 使用 cmd.exe /c 调用 taskkill，确保在各种 shell 环境下都能工作
+                cmd.exe /c "taskkill /F /PID $pid" >/dev/null 2>&1
+                if [ $? -eq 0 ]; then
+                    echo "    已终止进程 PID: $pid (端口 $port)"
+                fi
             fi
         done
     else
@@ -131,19 +136,51 @@ do_start() {
         kill_port $port
         sleep 0.3
 
-        # 启动 uvicorn
-        "$PYTHON_CMD" -m uvicorn "$module" --host 0.0.0.0 --port $port > "$LOG_DIR/${name}.log" 2>&1 &
+        # 启动 uvicorn (使用 nohup 确保进程在终端关闭后继续运行)
+        nohup "$PYTHON_CMD" -m uvicorn "$module" --host 0.0.0.0 --port $port > "$LOG_DIR/${name}.log" 2>&1 &
         echo $! >> "$PID_FILE"
         echo -e "    ${GREEN}$name${NC} -> http://localhost:$port"
         sleep 0.5
     done
 
-    # 启动前端
+    # 启动前端 (使用 nohup 确保进程在终端关闭后继续运行)
     echo -e "[*] 启动前端服务..."
     cd "$FRONTEND_DIR"
-    $NPM_CMD run dev > "$LOG_DIR/frontend.log" 2>&1 &
+    nohup $NPM_CMD run dev > "$LOG_DIR/frontend.log" 2>&1 &
     echo $! >> "$PID_FILE"
     echo -e "    ${GREEN}Frontend${NC} -> http://localhost:$FRONTEND_PORT"
+
+    echo ""
+    echo "[*] 等待服务启动..."
+    sleep 3
+
+    # 验证服务是否成功启动
+    echo "[*] 验证服务状态..."
+    local all_ok=true
+    for service in "${SERVICES[@]}"; do
+        port=$(echo "$service" | cut -d: -f1)
+        name=$(echo "$service" | cut -d: -f4)
+        if check_port $port; then
+            echo -e "    ${GREEN}[OK]${NC} $name (端口 $port)"
+        else
+            echo -e "    ${RED}[FAIL]${NC} $name (端口 $port) - 查看日志: logs/${name}.log"
+            all_ok=false
+        fi
+    done
+
+    if check_port $FRONTEND_PORT; then
+        echo -e "    ${GREEN}[OK]${NC} Frontend (端口 $FRONTEND_PORT)"
+    else
+        echo -e "    ${RED}[FAIL]${NC} Frontend (端口 $FRONTEND_PORT) - 查看日志: logs/frontend.log"
+        all_ok=false
+    fi
+
+    echo ""
+    if [ "$all_ok" = true ]; then
+        echo -e "${GREEN}所有服务启动成功！${NC}"
+    else
+        echo -e "${YELLOW}部分服务启动失败，请检查日志文件${NC}"
+    fi
 
     echo ""
     echo "------------------------------------------------------------"

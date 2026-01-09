@@ -586,6 +586,30 @@ class ApiClient {
       body: JSON.stringify({ message, history, context }),
     });
   }
+
+  // AI 评分服务 (独立服务 http://localhost:8005)
+  async gradeSubmissionWithAI(data: {
+    student_content: string;
+    grading_criteria: string;
+    homework_title: string;
+    homework_description: string;
+  }) {
+    const AIGRADING_URL = import.meta.env.VITE_AIGRADING_URL || 'http://localhost:8005';
+    try {
+      const response = await fetch(`${AIGRADING_URL}/grade`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('AI 评分请求失败:', error);
+      return { success: false, error: '网络请求失败' };
+    }
+  }
 }
 
 // 导出单例

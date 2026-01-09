@@ -37,41 +37,22 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
     size: number;
     content: string;
   } | null>(homework.attachment || null);
-  const [editGradingType, setEditGradingType] = useState<'text' | 'file'>(
-    homework.grading_criteria?.type || 'text'
-  );
   const [editGradingText, setEditGradingText] = useState(
-    homework.grading_criteria?.type === 'text' ? homework.grading_criteria.content : ''
-  );
-  const [editGradingFile, setEditGradingFile] = useState<{
-    name: string;
-    type: string;
-    size: number;
-    content: string;
-  } | null>(
-    homework.grading_criteria?.type === 'file' 
-      ? {
-          name: homework.grading_criteria.file_name || '',
-          type: '',
-          size: homework.grading_criteria.file_size || 0,
-          content: homework.grading_criteria.content,
-        }
-      : null
+    homework.grading_criteria?.content || ''
   );
 
   // 文件输入引用
   const editAttachmentInputRef = useRef<HTMLInputElement>(null);
-  const editGradingFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // 初始化编辑字段
     setEditTitle(homework.title);
     setEditDescription(homework.description);
-    
+
     // 解析deadline到日期时间
     try {
       const deadline = new Date(homework.deadline);
-      
+
       // 检查日期是否有效
       if (isNaN(deadline.getTime())) {
         console.error('无效的截止时间:', homework.deadline);
@@ -170,97 +151,41 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
     setFeedback(submission.feedback || '');
   };
 
-  // AI评分
+  // AI评分 - 调用后端 AI 评分服务
   const handleAIGrade = async () => {
     if (!gradingSubmission) return;
-    
+
+    // 检查是否有评分规则
+    if (!homework.grading_criteria?.content) {
+      toast.error('请先设置评分规则后再使用 AI 评分');
+      return;
+    }
+
     setIsAIGrading(true);
-    
-    // 模拟AI分析（延迟1-2秒）
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-    
+
     try {
-      // 分析作业内容
-      const content = gradingSubmission.content;
-      const contentLength = content.trim().length;
-      
-      // 基础分数（根据内容长度）
-      let aiScore = 60;
-      
-      if (contentLength < 50) {
-        aiScore = 40 + Math.random() * 20; // 40-60分
-      } else if (contentLength < 200) {
-        aiScore = 60 + Math.random() * 20; // 60-80分
+      const result = await api.gradeSubmissionWithAI({
+        student_content: gradingSubmission.content,
+        grading_criteria: homework.grading_criteria.content,
+        homework_title: homework.title,
+        homework_description: homework.description,
+      });
+
+      if (result.success) {
+        setScore(result.score.toString());
+        setFeedback(result.feedback);
+        toast.success('AI 评分完成！您可以根据实际情况调整分数和批语。');
       } else {
-        aiScore = 75 + Math.random() * 20; // 75-95分
+        toast.error(result.error || 'AI 评分失败，请手动评分');
       }
-      
-      // 根据评分标准调整分数
-      if (homework.grading_criteria?.type === 'text') {
-        const criteria = homework.grading_criteria.content.toLowerCase();
-        const contentLower = content.toLowerCase();
-        
-        // 检查是否包含关键词
-        const keywords = ['分析', '总结', '结论', '观点', '例子', '论证'];
-        const matchedKeywords = keywords.filter(kw => contentLower.includes(kw));
-        
-        // 每个关键词加2分
-        aiScore += matchedKeywords.length * 2;
-      }
-      
-      // 如果有附件，加分
-      if (gradingSubmission.attachments && gradingSubmission.attachments.length > 0) {
-        aiScore += 5;
-      }
-      
-      // 确保分数在0-100之间
-      aiScore = Math.min(100, Math.max(0, Math.round(aiScore)));
-      
-      // 生成AI反馈
-      let aiFeedback = '';
-      
-      if (aiScore >= 90) {
-        aiFeedback = '✨ 优秀的作业！内容全面，论述清晰，展现了深入的理解和思考。';
-      } else if (aiScore >= 80) {
-        aiFeedback = '👍 很好的作业！内容充实，理解准确，建议进一步完善细节。';
-      } else if (aiScore >= 70) {
-        aiFeedback = '✅ 良好的作业。基本要点已覆盖，但部分内容可以更深入分析。';
-      } else if (aiScore >= 60) {
-        aiFeedback = '📝 作业合格。已完成基本要求，建议增加更多分析和例证。';
-      } else {
-        aiFeedback = '⚠️ 作业需要改进���内容过于简单，建议补充更多内容和分析。';
-      }
-      
-      // 根据作业特点添加具体建议
-      if (contentLength < 100) {
-        aiFeedback += '\n💡 建议：内容略显简单，可以增加更详细的论述和分析。';
-      }
-      
-      if (homework.grading_criteria?.type === 'text') {
-        const criteria = homework.grading_criteria.content;
-        if (criteria.includes('例子') || criteria.includes('案例')) {
-          if (!content.includes('例如') && !content.includes('比如') && !content.includes('案例')) {
-            aiFeedback += '\n💡 建议：可以添加具体案例来支撑你的观点。';
-          }
-        }
-      }
-      
-      if (!gradingSubmission.attachments || gradingSubmission.attachments.length === 0) {
-        if (homework.attachment) {
-          aiFeedback += '\n💡 提示：作业要求中包含参考附件，建议查看并参考。';
-        }
-      }
-      
-      setScore(aiScore.toString());
-      setFeedback(aiFeedback);
-      toast.success('AI评分完成！您可以根据实际情况调整分数和批语。');
     } catch (error) {
       console.error('AI评分失败:', error);
-      toast.error('AI评分失败，请手动评分');
+      toast.error('AI 评分失败，请手动评分');
     } finally {
       setIsAIGrading(false);
     }
   };
+
 
   // 处理编辑附件上传
   const handleEditAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -283,40 +208,11 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
     reader.readAsDataURL(file);
   };
 
-  // 处理编辑评分文件上传
-  const handleEditGradingFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setEditGradingFile({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        content: reader.result as string,
-      });
-      toast.success('评分标准文件已添加');
-    };
-    reader.onerror = () => {
-      toast.error('文件读取失败');
-    };
-    reader.readAsDataURL(file);
-  };
-
   // 删除编辑附件
   const handleRemoveEditAttachment = () => {
     setEditAttachment(null);
     if (editAttachmentInputRef.current) {
       editAttachmentInputRef.current.value = '';
-    }
-  };
-
-  // 删除编辑评分文件
-  const handleRemoveEditGradingFile = () => {
-    setEditGradingFile(null);
-    if (editGradingFileInputRef.current) {
-      editGradingFileInputRef.current.value = '';
     }
   };
 
@@ -336,25 +232,16 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
     }
 
     try {
-      // 构建评分规则
+      // 构建评分规则（仅文本）
       let gradingCriteria: {
-        type: 'text' | 'file';
+        type: 'text';
         content: string;
-        file_name?: string;
-        file_size?: number;
       } | undefined;
 
-      if (editGradingType === 'text' && editGradingText.trim()) {
+      if (editGradingText.trim()) {
         gradingCriteria = {
           type: 'text',
           content: editGradingText.trim(),
-        };
-      } else if (editGradingType === 'file' && editGradingFile) {
-        gradingCriteria = {
-          type: 'file',
-          content: editGradingFile.content,
-          file_name: editGradingFile.name,
-          file_size: editGradingFile.size,
         };
       }
 
@@ -386,7 +273,7 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
   const downloadSingleSubmission = async (submission: SubmissionWithStudent) => {
     try {
       const zip = new JSZip();
-      
+
       // 创建学生名文件夹
       const studentFolder = zip.folder(submission.student_name);
       if (!studentFolder) {
@@ -416,7 +303,7 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
 
       // 生成zip文件
       const content = await zip.generateAsync({ type: 'blob' });
-      
+
       // 创建下载链接
       const url = URL.createObjectURL(content);
       const link = document.createElement('a');
@@ -426,7 +313,7 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      
+
       toast.success('下载成功');
     } catch (error: any) {
       console.error('❌ 下载失败:', error);
@@ -444,7 +331,7 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
     try {
       toast.info('正在打包，请稍候...');
       const zip = new JSZip();
-      
+
       // 为每个学生创建文件夹
       for (const submission of submissions) {
         const studentFolder = zip.folder(submission.student_name);
@@ -484,7 +371,7 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      
+
       toast.success('下载成功');
     } catch (error: any) {
       console.error('❌ 下载失败:', error);
@@ -515,7 +402,7 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
               <span>编辑</span>
             </button>
           </div>
-          
+
           {/* 作业标题 */}
           <div className="mb-4">
             <label className="block text-gray-600 text-sm mb-1">标题</label>
@@ -944,61 +831,15 @@ export function Grading({ courseId, courseName, homeworkId, homeworkTitle, homew
             {/* 评分标准 */}
             <div className="mb-4">
               <label className="block text-gray-700 text-sm mb-2">评分标准</label>
-              <div className="flex items-center gap-2">
-                <select
-                  value={editGradingType}
-                  onChange={(e) => setEditGradingType(e.target.value as 'text' | 'file')}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="text">文本</option>
-                  <option value="file">文件</option>
-                </select>
-                {editGradingType === 'text' ? (
-                  <textarea
-                    value={editGradingText}
-                    onChange={(e) => setEditGradingText(e.target.value)}
-                    rows={4}
-                    placeholder="输入评分标准..."
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                  />
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="file"
-                      ref={editGradingFileInputRef}
-                      onChange={handleEditGradingFileChange}
-                      className="hidden"
-                    />
-                    <button
-                      onClick={() => editGradingFileInputRef.current?.click()}
-                      className="flex items-center gap-2 px-3 py-2 text-green-600 hover:bg-green-50 rounded-lg transition text-sm"
-                    >
-                      <Paperclip size={16} />
-                      <span>上传评分标准文件</span>
-                    </button>
-                    {editGradingFile && (
-                      <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg text-sm">
-                        {editGradingFile.type.startsWith('image/') ? (
-                          <Image size={16} className="text-indigo-600 flex-shrink-0" />
-                        ) : (
-                          <FileText size={16} className="text-gray-600 flex-shrink-0" />
-                        )}
-                        <span className="text-gray-700">{editGradingFile.name}</span>
-                        <span className="text-gray-500 text-xs">
-                          ({formatFileSize(editGradingFile.size)})
-                        </span>
-                        <button
-                          onClick={handleRemoveEditGradingFile}
-                          className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <textarea
+                value={editGradingText}
+                onChange={(e) => setEditGradingText(e.target.value)}
+                rows={4}
+                placeholder="输入评分标准..."
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+              />
             </div>
+
 
             {/* 按钮 */}
             <div className="flex items-center gap-3">

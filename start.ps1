@@ -18,7 +18,8 @@ $Services = @(
     @{Port=8080; Module="app.main:app"; Name="Main_API"},
     @{Port=8002; Module="aippt.main:app"; Name="AI_PPT"},
     @{Port=8003; Module="aiwriting.main:app"; Name="AI_Writing"},
-    @{Port=8004; Module="airag.main:app"; Name="AI_RAG"}
+    @{Port=8004; Module="airag.main:app"; Name="AI_RAG"},
+    @{Port=8005; Module="aigrading.main:app"; Name="AI_Grading"}
 )
 $FrontendPort = 3000
 

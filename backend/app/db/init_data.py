@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from app.core import get_password_hash
 from app.models import (
     User, Teacher, Student, Course, Homework,
-    CourseEnrollment, UserRole, Gender
+    CourseEnrollment, UserRole, Gender, HomeworkSubmission
 )
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
@@ -41,6 +41,19 @@ TEACHER_NAMES = [
     ("王志强", Gender.MALE),
     ("陈雪梅", Gender.FEMALE),
     ("刘明华", Gender.MALE)
+]
+
+# 示例作业提交内容
+SAMPLE_SUBMISSION_CONTENTS = [
+    "# 作业完成报告\n\n## 实现思路\n\n我采用了模块化的设计方法，将问题分解为多个子问题分别解决。首先分析了题目要求，然后设计了核心算法，最后进行了测试验证。\n\n## 代码实现\n\n```python\ndef solve(n):\n    result = []\n    for i in range(n):\n        result.append(i * 2)\n    return result\n```\n\n## 测试结果\n\n所有测试用例均通过，程序运行正常。\n\n## 总结\n\n通过本次作业，我深入理解了相关概念，提升了编程能力。",
+    
+    "# 实验报告\n\n## 一、实验目的\n\n通过本次实验，掌握相关知识点的实际应用。\n\n## 二、实验内容\n\n按照题目要求，完成了以下功能：\n1. 数据读取与处理\n2. 算法实现与优化\n3. 结果输出与验证\n\n## 三、实验结果\n\n经过多次测试，程序能够正确处理各种输入情况。\n\n## 四、心得体会\n\n本次实验让我收获很多，加深了对课程内容的理解。",
+    
+    "## 作业答案\n\n### 问题分析\n\n仔细阅读题目后，我认为这个问题的核心在于如何高效地处理数据。\n\n### 解决方案\n\n采用递归的方法解决问题，时间复杂度为O(n)。\n\n### 代码\n\n```python\nclass Solution:\n    def process(self, data):\n        if not data:\n            return None\n        return self.helper(data, 0, len(data)-1)\n    \n    def helper(self, data, left, right):\n        if left > right:\n            return None\n        mid = (left + right) // 2\n        return data[mid]\n```\n\n### 运行截图\n\n程序运行成功，输出符合预期。",
+    
+    "作业题目：综合练习\n\n完成情况：\n\n1. 第一题：采用动态规划方法，定义状态dp[i]表示前i个元素的最优解。状态转移方程为dp[i] = max(dp[i-1], dp[i-2] + nums[i])。\n\n2. 第二题：使用双指针技巧，left从0开始，right从末尾开始，逐步向中间靠拢。\n\n3. 第三题：利用哈希表存储已访问的元素，实现O(1)的查找效率。\n\n所有代码已测试通过，详见附件。",
+    
+    "# 学习笔记与作业\n\n## 本周学习内容\n\n- 理论知识：深入学习了相关概念和原理\n- 实践练习：完成了课后习题和编程作业\n\n## 作业解答\n\n根据课堂所学，我完成了本次作业。主要思路是：\n\n1. 首先理解问题的本质\n2. 然后选择合适的数据结构\n3. 最后实现并验证算法的正确性\n\n## 遇到的问题\n\n在实现过程中遇到了边界条件处理的问题，通过查阅资料和反复调试解决了。\n\n## 收获与反思\n\n本次作业加深了我对知识点的理解，也提升了解决问题的能力。"
 ]
 
 # 课程数据
@@ -210,7 +223,9 @@ async def init_default_data(session: AsyncSession):
         )
         session.add(teacher)
 
-    # 存储学生的 user_id，用于选课（CourseEnrollment.student_id 外键关联 users.id）
+    # 存储学生信息，用于选课和提交作业
+    # student_info: {user_id: student_id}
+    student_info = {}
     student_user_ids = []
 
     # 创建学生
@@ -243,8 +258,13 @@ async def init_default_data(session: AsyncSession):
         )
         session.add(student)
         await session.flush()
-        # 保存 user_id 而不是 student.id，因为 CourseEnrollment.student_id 关联的是 users.id
+        
+        # 保存 user_id 和 student.id 的映射
+        student_info[user.id] = student.id
         student_user_ids.append(user.id)
+
+    # 统计提交数量
+    total_submissions = 0
 
     # 创建课程和作业
     for course_data in COURSES_DATA:
@@ -271,7 +291,7 @@ async def init_default_data(session: AsyncSession):
             )
             session.add(enrollment)
 
-        # 创建作业
+        # 创建作业和提交
         for hw_data in course_data["homeworks"]:
             deadline = datetime.utcnow() + timedelta(days=hw_data["deadline_days"])
             homework = Homework(
@@ -285,6 +305,33 @@ async def init_default_data(session: AsyncSession):
                 }
             )
             session.add(homework)
+            await session.flush()
+            
+            # 为部分选课学生创建作业提交（60%-80%的提交率）
+            submission_rate = random.uniform(0.6, 0.8)
+            submitting_students = random.sample(
+                selected_students, 
+                int(len(selected_students) * submission_rate)
+            )
+            
+            for student_user_id in submitting_students:
+                student_id = student_info[student_user_id]
+                
+                # 随机选择提交内容
+                content = random.choice(SAMPLE_SUBMISSION_CONTENTS)
+                
+                # 随机生成提交时间（在作业发布后1-5天内）
+                days_after = random.randint(1, min(5, hw_data["deadline_days"]))
+                submitted_at = datetime.utcnow() - timedelta(days=hw_data["deadline_days"] - days_after)
+                
+                submission = HomeworkSubmission(
+                    homework_id=homework.id,
+                    student_id=student_id,
+                    content=content,
+                    submitted_at=submitted_at
+                )
+                session.add(submission)
+                total_submissions += 1
 
     await session.commit()
     print("默认数据初始化完成！")
@@ -300,4 +347,6 @@ async def init_default_data(session: AsyncSession):
     print(f"课程数量: {len(COURSES_DATA)}")
     total_homeworks = sum(len(c["homeworks"]) for c in COURSES_DATA)
     print(f"作业数量: {total_homeworks}")
+    print(f"作业提交数量: {total_submissions}")
     print("=" * 50)
+

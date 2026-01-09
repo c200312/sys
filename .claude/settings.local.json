@@ -18,7 +18,21 @@
       "Bash([[ \"$OSTYPE\" == \"msys\")",
       "Bash(\"$OSTYPE\" == \"cygwin\")",
       "Bash(\"$OS\" == \"Windows_NT\" ]])",
-      "Bash(echo \"OS=$OS\")"
+      "Bash(echo \"OS=$OS\")",
+      "Bash(bash start.sh status)",
+      "Bash(bash d:/project/sys/start.sh stop)",
+      "Bash(bash d:/project/sys/start.sh start)",
+      "Bash(cat d:/project/sys/logs/AI_PPT.log)",
+      "Bash(cat d:/project/sys/logs/AI_Writing.log)",
+      "Bash(cat d:/project/sys/logs/AI_RAG.log)",
+      "Bash(cat d:/project/sys/logs/frontend.log)",
+      "Bash(cat d:/project/sys/logs/Main_API.log)",
+      "Bash(taskkill //F //PID 62840)",
+      "Bash(taskkill //F //PID 67560)",
+      "Bash(taskkill //F //PID 75580)",
+      "Bash(taskkill //F //PID 27732)",
+      "Bash(dir:*)",
+      "Bash(cat:*)"
     ]
   }
 }

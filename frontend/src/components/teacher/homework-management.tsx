@@ -16,7 +16,7 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
   const [editingHomework, setEditingHomework] = useState<Homework | null>(null); // 编辑中的作业
   const [selectedHomework, setSelectedHomework] = useState<Homework | null>(null);
   const [deletingHomework, setDeletingHomework] = useState<Homework | null>(null); // 待删除的作业
-  
+
   // 表单字段
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -28,16 +28,9 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
     type: string;
     content: string;
   } | null>(null);
-  const [gradingType, setGradingType] = useState<'text' | 'file'>('text');
   const [gradingText, setGradingText] = useState('');
-  const [gradingFile, setGradingFile] = useState<{
-    name: string;
-    size: number;
-    content: string;
-  } | null>(null);
 
   const attachmentInputRef = useRef<HTMLInputElement>(null);
-  const gradingFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadHomeworks();
@@ -94,39 +87,11 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
     reader.readAsDataURL(file);
   };
 
-  // 处理评分规则文件上传
-  const handleGradingFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setGradingFile({
-        name: file.name,
-        size: file.size,
-        content: reader.result as string,
-      });
-      toast.success('评分规则文件已添加');
-    };
-    reader.onerror = () => {
-      toast.error('文件读取失败');
-    };
-    reader.readAsDataURL(file);
-  };
-
   // 删除附件
   const handleRemoveAttachment = () => {
     setAttachment(null);
     if (attachmentInputRef.current) {
       attachmentInputRef.current.value = '';
-    }
-  };
-
-  // 删除评分规则文件
-  const handleRemoveGradingFile = () => {
-    setGradingFile(null);
-    if (gradingFileInputRef.current) {
-      gradingFileInputRef.current.value = '';
     }
   };
 
@@ -159,25 +124,16 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
       // 构建完整的截止时间
       const fullDueDate = `${dueDate}T${String(dueTime.hour).padStart(2, '0')}:${String(dueTime.minute).padStart(2, '0')}:00`;
 
-      // 构建评分规则
+      // 构建评分规则（仅文本）
       let gradingCriteria: {
-        type: 'text' | 'file';
+        type: 'text';
         content: string;
-        file_name?: string;
-        file_size?: number;
       } | undefined;
 
-      if (gradingType === 'text' && gradingText.trim()) {
+      if (gradingText.trim()) {
         gradingCriteria = {
           type: 'text',
           content: gradingText.trim(),
-        };
-      } else if (gradingType === 'file' && gradingFile) {
-        gradingCriteria = {
-          type: 'file',
-          content: gradingFile.content,
-          file_name: gradingFile.name,
-          file_size: gradingFile.size,
         };
       }
 
@@ -212,11 +168,8 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
     setDueDate(tomorrow.toISOString().split('T')[0]);
     setDueTime({ hour: 23, minute: 59 });
     setAttachment(null);
-    setGradingType('text');
     setGradingText('');
-    setGradingFile(null);
     if (attachmentInputRef.current) attachmentInputRef.current.value = '';
-    if (gradingFileInputRef.current) gradingFileInputRef.current.value = '';
   };
 
   // 删除作业
@@ -264,8 +217,8 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
         >
           ← 返回作业列表
         </button>
-        <Grading 
-          courseId={courseId} 
+        <Grading
+          courseId={courseId}
           courseName={courseName}
           homeworkId={selectedHomework.id}
           homeworkTitle={selectedHomework.title}
@@ -292,12 +245,6 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
         type="file"
         className="hidden"
         onChange={handleAttachmentChange}
-      />
-      <input
-        ref={gradingFileInputRef}
-        type="file"
-        className="hidden"
-        onChange={handleGradingFileChange}
       />
 
       {/* 头部 */}
@@ -351,9 +298,9 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
                         <span>截止：{new Date(homework.deadline).toLocaleString('zh-CN')}</span>
                       </div>
                     </div>
-                    
+
                     <p className="text-gray-600 text-sm mb-3 ml-5">{homework.description}</p>
-                    
+
                     <div className="ml-5 space-y-2">
                       {/* 发布时间 */}
                       <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -375,8 +322,8 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
                           <FileCheck size={14} />
                           <span>
                             评分规则：
-                            {homework.grading_criteria.type === 'text' 
-                              ? homework.grading_criteria.content 
+                            {homework.grading_criteria.type === 'text'
+                              ? homework.grading_criteria.content
                               : `${homework.grading_criteria.file_name} (${formatFileSize(homework.grading_criteria.file_size || 0)})`
                             }
                           </span>
@@ -431,9 +378,9 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
                         <span>截止：{new Date(homework.deadline).toLocaleString('zh-CN')}</span>
                       </div>
                     </div>
-                    
+
                     <p className="text-gray-600 text-sm mb-3 ml-5">{homework.description}</p>
-                    
+
                     <div className="ml-5 space-y-2">
                       {/* 发布时间 */}
                       <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -455,8 +402,8 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
                           <FileCheck size={14} />
                           <span>
                             评分规则：
-                            {homework.grading_criteria.type === 'text' 
-                              ? homework.grading_criteria.content 
+                            {homework.grading_criteria.type === 'text'
+                              ? homework.grading_criteria.content
                               : `${homework.grading_criteria.file_name} (${formatFileSize(homework.grading_criteria.file_size || 0)})`
                             }
                           </span>
@@ -493,7 +440,7 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
             <p className="text-red-600 text-sm mb-6">
               此操作将删除作业及所有学生的提交记录，且无法撤销！
             </p>
-            
+
             <div className="flex items-center gap-3">
               <button
                 onClick={handleDeleteHomework}
@@ -587,73 +534,15 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
                     <label className="block text-gray-700 text-sm mb-2">
                       评分规则（可选）
                     </label>
-                    
-                    {/* 类型选择 */}
-                    <div className="flex gap-3 mb-3">
-                      <button
-                        onClick={() => setGradingType('text')}
-                        className={`flex-1 px-4 py-2 rounded-lg border transition ${
-                          gradingType === 'text'
-                            ? 'border-indigo-600 bg-indigo-50 text-indigo-600'
-                            : 'border-gray-300 text-gray-600 hover:border-gray-400'
-                        }`}
-                      >
-                        文本描述
-                      </button>
-                      <button
-                        onClick={() => setGradingType('file')}
-                        className={`flex-1 px-4 py-2 rounded-lg border transition ${
-                          gradingType === 'file'
-                            ? 'border-indigo-600 bg-indigo-50 text-indigo-600'
-                            : 'border-gray-300 text-gray-600 hover:border-gray-400'
-                        }`}
-                      >
-                        上传文件
-                      </button>
-                    </div>
-
-                    {/* 文本输入 */}
-                    {gradingType === 'text' && (
-                      <textarea
-                        value={gradingText}
-                        onChange={(e) => setGradingText(e.target.value)}
-                        placeholder="例如：满分100分，按要点给分..."
-                        rows={3}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                      />
-                    )}
-
-                    {/* 文件上传 */}
-                    {gradingType === 'file' && (
-                      <>
-                        {!gradingFile ? (
-                          <button
-                            onClick={() => gradingFileInputRef.current?.click()}
-                            className="flex items-center gap-2 px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-400 hover:bg-indigo-50 transition text-gray-600 hover:text-indigo-600 w-full"
-                          >
-                            <FileCheck size={16} />
-                            <span className="text-sm">点击上传评分规则文件</span>
-                          </button>
-                        ) : (
-                          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                            <div className="flex items-center gap-2">
-                              <FileText size={16} className="text-green-500" />
-                              <div>
-                                <p className="text-gray-800 text-sm">{gradingFile.name}</p>
-                                <p className="text-gray-500 text-xs">{formatFileSize(gradingFile.size)}</p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={handleRemoveGradingFile}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
+                    <textarea
+                      value={gradingText}
+                      onChange={(e) => setGradingText(e.target.value)}
+                      placeholder="例如：满分100分，按要点给分..."
+                      rows={3}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    />
                   </div>
+
                 </div>
 
                 {/* 底部按钮 */}
@@ -694,7 +583,7 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
                 {/* 时间选择（钟表形式） */}
                 <div>
                   <label className="block text-gray-700 text-sm mb-2">时间</label>
-                  
+
                   {/* 时间显示 */}
                   <div className="text-center mb-4">
                     <div className="text-4xl text-gray-800">
@@ -712,11 +601,10 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
                           <button
                             key={hour}
                             onClick={() => setHour(hour)}
-                            className={`p-2 rounded text-sm transition ${
-                              dueTime.hour === hour
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
+                            className={`p-2 rounded text-sm transition ${dueTime.hour === hour
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
                           >
                             {String(hour).padStart(2, '0')}
                           </button>
@@ -732,11 +620,10 @@ export function HomeworkManagement({ courseId, courseName }: HomeworkManagementP
                           <button
                             key={minute}
                             onClick={() => setMinute(minute)}
-                            className={`p-2 rounded text-sm transition ${
-                              dueTime.minute === minute
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
+                            className={`p-2 rounded text-sm transition ${dueTime.minute === minute
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
                           >
                             {String(minute).padStart(2, '0')}
                           </button>

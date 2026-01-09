@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     airag_port: int = 8004
     airag_model: str = "gpt-4o"
 
+    # AI 评分服务配置
+    aigrading_port: int = 8005
+
     # MinerU API 配置 (PDF/DOCX 解析)
     mineru_api_token: str = ""
 

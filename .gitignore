@@ -80,7 +80,7 @@ nul
 *.njsproj
 *.sln
 *.sw?
-
+.qoder/
 # OS files
 .DS_Store
 Thumbs.db
@@ -118,3 +118,6 @@ backend/aippt/storage/
 # AI RAG 知识库数据
 backend/airag/chroma_db/
 backend/airag/index_store/
+
+/wikidocs
+/毕设

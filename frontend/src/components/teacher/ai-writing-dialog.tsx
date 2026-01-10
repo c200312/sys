@@ -31,13 +31,63 @@ const RESOURCE_TYPES = [
   { value: 'custom', label: '自定义', description: '按照您的要求自由创作' },
 ];
 
+// 每种资源类型的示例模板
+const RESOURCE_TEMPLATES_EXAMPLES: Record<string, string> = {
+  lesson_plan: `请生成一份完整的教案，要求如下：
+- 面向本科二年级学生
+- 课程时长：45分钟
+- 教学目标：掌握核心概念并能实际应用
+- 包含教学导入、新课讲授、课堂互动、练习巩固、课堂小结等环节
+- 注明重点难点及突破策略
+- 提供2-3个实际案例辅助讲解`,
+
+  exercises: `请生成一套习题，要求如下：
+- 题目总数：10道
+- 题型分布：选择题5道、填空题3道、简答题2道
+- 难度分级：基础题60%、提高题30%、拓展题10%
+- 每道题目需标注考察知识点
+- 提供完整的参考答案和详细解析
+- 预估完成时间：30分钟`,
+
+  courseware: `请生成课件大纲，要求如下：
+- 总页数控制在20-25页
+- 每页包含标题和3-5个要点
+- 需要配图建议的页面请标注[配图：图片描述]
+- 包含案例展示页和知识小结页
+- 适合45分钟的授课时长
+- 重点内容用特殊标记突出`,
+
+  summary: `请生成知识总结，要求如下：
+- 采用思维导图式的层级结构
+- 核心概念需要给出准确定义
+- 列出知识点之间的关联关系
+- 标注重点和易混淆点
+- 提供记忆口诀或助记方法
+- 末尾附上常考题型和解题思路`,
+
+  activity: `请设计教学活动方案，要求如下：
+- 活动时长：15-20分钟
+- 参与形式：小组协作（4-5人一组）
+- 明确活动目标和预期成果
+- 详细的活动步骤和时间分配
+- 所需道具/材料清单
+- 教师引导要点和注意事项
+- 学生成果评价标准`,
+
+  custom: `请按照您的需求自由创作，您可以描述：
+- 目标受众和教学场景
+- 内容主题和核心要点
+- 期望的格式和结构
+- 特殊要求或注意事项`,
+};
+
 export function AIWritingDialog({ onClose, onSave }: AIWritingDialogProps) {
   const [step, setStep] = useState<'input' | 'editing'>('input');
 
   // 输入阶段状态
   const [resourceTitle, setResourceTitle] = useState('');
   const [resourceType, setResourceType] = useState('lesson_plan');
-  const [requirements, setRequirements] = useState('');
+  const [requirements, setRequirements] = useState(RESOURCE_TEMPLATES_EXAMPLES['lesson_plan']);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
@@ -158,26 +208,26 @@ export function AIWritingDialog({ onClose, onSave }: AIWritingDialogProps) {
   // 处理文本选择
   const handleTextSelect = () => {
     if (!textareaRef.current) return;
-    
+
     const start = textareaRef.current.selectionStart;
     const end = textareaRef.current.selectionEnd;
     const selected = generatedContent.substring(start, end);
-    
+
     if (selected && selected.trim().length > 0) {
       setSelectedText(selected);
       setSelectionStart(start);
       setSelectionEnd(end);
-      
+
       // 计算浮窗位置
       const textarea = textareaRef.current;
       const rect = textarea.getBoundingClientRect();
-      
+
       // 浮窗显示在textarea右侧中间位置
       setPopupPosition({
         top: rect.top + rect.height / 2 - 100,
         left: rect.right + 20
       });
-      
+
       setShowEditPopup(true);
       setEditRequirement('');
     } else {
@@ -262,13 +312,13 @@ export function AIWritingDialog({ onClose, onSave }: AIWritingDialogProps) {
   // 保留AI修改
   const handleKeepEdit = () => {
     if (!aiEditResult) return;
-    
+
     // 将原文替换为AI生成的内容
-    const newContent = 
-      generatedContent.substring(0, aiEditResult.startIndex) + 
-      aiEditResult.generatedText + 
+    const newContent =
+      generatedContent.substring(0, aiEditResult.startIndex) +
+      aiEditResult.generatedText +
       generatedContent.substring(aiEditResult.endIndex);
-    
+
     setGeneratedContent(newContent);
     setAIEditResult(null);
     toast.success('已保留AI修改');
@@ -305,7 +355,7 @@ export function AIWritingDialog({ onClose, onSave }: AIWritingDialogProps) {
       toast.error('请先保留或还原AI修改后再保存');
       return;
     }
-    
+
     if (!generatedContent.trim()) {
       toast.error('资源内容不能为空');
       return;
@@ -363,7 +413,7 @@ export function AIWritingDialog({ onClose, onSave }: AIWritingDialogProps) {
             <div className="space-y-6">
               <div>
                 <h3 className="text-gray-800 mb-4">填写生成信息</h3>
-                
+
                 <div className="space-y-4">
                   {/* 资源标题 */}
                   <div>
@@ -386,7 +436,12 @@ export function AIWritingDialog({ onClose, onSave }: AIWritingDialogProps) {
                     </label>
                     <select
                       value={resourceType}
-                      onChange={(e) => setResourceType(e.target.value)}
+                      onChange={(e) => {
+                        const newType = e.target.value;
+                        setResourceType(newType);
+                        // 切换类型时自动填充对应的示例模板
+                        setRequirements(RESOURCE_TEMPLATES_EXAMPLES[newType] || '');
+                      }}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                     >
                       {RESOURCE_TYPES.map((type) => (
@@ -431,7 +486,7 @@ export function AIWritingDialog({ onClose, onSave }: AIWritingDialogProps) {
                       <Upload size={18} />
                       <span>点击上传参考资料/模板（支持多个文件）</span>
                     </button>
-                    
+
                     {/* 已上传文件列表 */}
                     {uploadedFiles.length > 0 && (
                       <div className="mt-3 space-y-2">
@@ -501,7 +556,7 @@ export function AIWritingDialog({ onClose, onSave }: AIWritingDialogProps) {
                   <label className="block text-gray-700 text-sm mb-2">
                     生成的资源（可编辑，选中文本进行AI二改）
                   </label>
-                  
+
                   {/* 如果有AI编辑结果，显示带高亮的预览 */}
                   {aiEditResult ? (
                     <div className="relative">
@@ -601,7 +656,7 @@ export function AIWritingDialog({ onClose, onSave }: AIWritingDialogProps) {
               </button>
             </div>
           </div>
-          
+
           <div className="border-t border-gray-200 pt-3">
             <label className="block text-gray-600 text-xs mb-2">自定义修改要求</label>
             <input

@@ -86,6 +86,8 @@ Style: Modern SaaS aesthetic, clean UI, sleek vector art, soft shadows (glassmor
 Background: Clean LIGHT background (white or very light grey) with SUBTLE tech accents.
 Content: Minimalist infographics, rounded cards, sans-serif typography.
 Avoid: Old-school academic look, heavy dark borders, realistic photos, cluttered text.
+
+【重要】所有幻灯片中的文字必须使用简体中文，包括标题、正文、图表标签等。
 """
 
 def get_openai_client(api_key: str = None):
@@ -107,8 +109,9 @@ def plan_ppt_outline(client: OpenAI, prompt: str, page_count: int) -> List[dict]
     1. Slide 1: Title/Cover slide
     2. Middle slides: Main content
     3. Last slide: Summary/Thank you
-    4. Detect and use the user's language
+    4. 必须使用简体中文输出所有内容，包括标题和visual_prompt
     5. Each slide needs a visual_prompt for image generation
+    6. visual_prompt中必须明确要求"所有文字使用简体中文"
 
     Output JSON format:
     {{
@@ -141,7 +144,8 @@ def plan_ppt_outline(client: OpenAI, prompt: str, page_count: int) -> List[dict]
 
 def generate_slide_image(client: OpenAI, visual_prompt: str, style: str) -> str:
     """生成单张幻灯片图片"""
-    full_prompt = f"{style}\n\n**SLIDE CONTENT**: {visual_prompt}"
+    chinese_requirement = "【重要要求】幻灯片中所有文字必须使用简体中文，包括标题、正文、图表标签、说明文字等。"
+    full_prompt = f"{style}\n\n{chinese_requirement}\n\n**SLIDE CONTENT**: {visual_prompt}"
 
     try:
         response = client.chat.completions.create(

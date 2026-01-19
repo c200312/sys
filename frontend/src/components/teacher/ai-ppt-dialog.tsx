@@ -35,6 +35,32 @@ export function AIPPTDialog({ onClose, onSave }: AIPPTDialogProps) {
   const [showPreview, setShowPreview] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
 
+  // 提示词示例模板
+  const promptTemplate = {
+    title: '基于 eBPF 的 GPU 细粒度虚拟化技术',
+    prompt: `基于 eBPF 劫持 CUDA Driver API 实现 GPU 细粒度虚拟化
+
+课程内容要点：
+1. 背景介绍：云原生时代GPU算力困境，资源利用率低、传统虚拟化方案局限性
+2. 核心技术：eBPF Uprobes机制、CUDA Driver API vs Runtime API
+3. 架构设计：控制面(HAMi-Scheduler、Webhook)与数据面(Device Plugin、eBPF Agent)
+4. 关键实现：显存虚拟化(cuMemAlloc拦截)、算力虚拟化(时间片轮转)、故障隔离
+5. 生产特性：动态算力伸缩、拓扑感知调度(NVLink)
+6. 应用场景：云原生AI平台、大模型推理、边缘计算
+7. 性能评估：约1-2%性能损耗，显存带宽损耗<1%
+
+风格要求：
+- 面向云原生/AI基础设施工程师
+- 包含架构图、流程图、代码示例
+- 技术深度适中，理论与实践结合`
+  };
+
+  // 应用模板
+  const applyTemplate = () => {
+    setPPTTitle(promptTemplate.title);
+    setPrompt(promptTemplate.prompt);
+  };
+
   // 生成 PPT
   const generatePPT = async () => {
     if (!pptTitle.trim()) {
@@ -219,6 +245,17 @@ export function AIPPTDialog({ onClose, onSave }: AIPPTDialogProps) {
                     <label className="block text-gray-700 text-sm mb-2">
                       <span className="text-red-500">*</span> 生成提示词
                     </label>
+                    {/* 提示词模板 */}
+                    <div className="mb-3">
+                      <p className="text-gray-500 text-xs mb-2">快速填充示例：</p>
+                      <button
+                        onClick={() => applyTemplate()}
+                        disabled={isGenerating}
+                        className="px-3 py-1.5 text-xs bg-orange-50 text-orange-600 border border-orange-200 rounded-full hover:bg-orange-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        eBPF GPU虚拟化技术
+                      </button>
+                    </div>
                     <textarea
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}

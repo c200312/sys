@@ -33,46 +33,210 @@ const RESOURCE_TYPES = [
 
 // 每种资源类型的示例模板
 const RESOURCE_TEMPLATES_EXAMPLES: Record<string, string> = {
-  lesson_plan: `请生成一份完整的教案，要求如下：
-- 面向本科二年级学生
-- 课程时长：45分钟
-- 教学目标：掌握核心概念并能实际应用
-- 包含教学导入、新课讲授、课堂互动、练习巩固、课堂小结等环节
-- 注明重点难点及突破策略
-- 提供2-3个实际案例辅助讲解`,
+  lesson_plan: `请生成一份关于"基于eBPF劫持CUDA Driver API实现GPU细粒度虚拟化"的完整教案，要求如下：
 
-  exercises: `请生成一套习题，要求如下：
+【课程基本信息】
+- 面向云原生/AI基础设施方向的研究生或高年级本科生
+- 课程时长：90分钟（含实验演示）
+- 先修知识：Linux内核基础、容器技术、CUDA编程基础
+
+【教学目标】
+1. 理解云原生时代GPU算力困境：资源利用率低、传统虚拟化方案局限性
+2. 掌握eBPF核心技术：Uprobes机制、BPF Map、内核态Hook原理
+3. 理解CUDA Driver API与Runtime API的关系及拦截策略
+4. 掌握GPU虚拟化架构：控制面(HAMi-Scheduler、Webhook)与数据面(Device Plugin、eBPF Agent)
+5. 理解关键实现：显存虚拟化(cuMemAlloc拦截)、算力虚拟化(时间片轮转)、故障隔离
+
+【教学内容要点】
+1. 背景与动机（15分钟）
+   - GPU资源碎片化问题：单个Jupyter占用整张A100
+   - 传统方案对比：PCIe Passthrough、vGPU、MIG、LD_PRELOAD的优缺点
+
+2. eBPF技术原理（20分钟）
+   - eBPF架构：验证器、JIT编译、Map数据结构
+   - Uprobe机制：用户态函数Hook原理
+   - 与传统LD_PRELOAD方案的对比优势
+
+3. CUDA驱动模型（15分钟）
+   - Runtime API vs Driver API层次关系
+   - 为什么必须Hook libcuda.so
+   - 关键API：cuMemAlloc、cuLaunchKernel
+
+4. 系统架构设计（20分钟）
+   - 控制面：HAMi-Scheduler调度策略、Mutating Webhook
+   - 数据面：Device Plugin资源上报、eBPF Agent拦截
+   - 显存虚拟化：配额检查、欺骗查询
+   - 算力虚拟化：Token桶限流、时间片轮转
+
+5. 生产实践（15分钟）
+   - Kubernetes部署：Helm安装HAMi
+   - Pod资源申请：nvidia.com/gpumem、nvidia.com/gpucores
+   - 性能评估：约1-2%损耗
+
+6. 实验演示（5分钟）
+   - 演示多容器共享GPU场景
+
+【教学方法】
+- 理论讲授结合架构图解析
+- 代码走读：eBPF程序示例
+- 实际演示：Kubernetes环境部署`,
+
+  exercises: `请生成一套关于"eBPF GPU虚拟化技术"的习题，要求如下：
+
+【题目设置】
 - 题目总数：10道
 - 题型分布：选择题5道、填空题3道、简答题2道
 - 难度分级：基础题60%、提高题30%、拓展题10%
+
+【考察知识点】
+1. eBPF基础：验证器、JIT、Map类型、Uprobe机制
+2. CUDA架构：Runtime API与Driver API关系、关键API功能
+3. 虚拟化原理：显存虚拟化、算力虚拟化、故障隔离
+4. 系统架构：HAMi组件、Device Plugin、调度策略
+5. 生产实践：Kubernetes资源配置、性能指标
+
+【题目示例方向】
+- 选择题：eBPF相比LD_PRELOAD的优势、cuMemAlloc拦截的目的
+- 填空题：BPF Map类型、HAMi调度策略名称
+- 简答题：解释显存"欺骗查询"的必要性、描述Token桶限流算法
+
+【答案要求】
 - 每道题目需标注考察知识点
 - 提供完整的参考答案和详细解析
-- 预估完成时间：30分钟`,
+- 预估完成时间：45分钟`,
 
-  courseware: `请生成课件大纲，要求如下：
-- 总页数控制在20-25页
+  courseware: `请生成关于"基于eBPF的GPU细粒度虚拟化"课件大纲，要求如下：
+
+【整体结构】
+- 总页数控制在25-30页
 - 每页包含标题和3-5个要点
 - 需要配图建议的页面请标注[配图：图片描述]
-- 包含案例展示页和知识小结页
-- 适合45分钟的授课时长
-- 重点内容用特殊标记突出`,
 
-  summary: `请生成知识总结，要求如下：
+【内容大纲】
+第一部分：背景与动机（5页）
+- 封面：标题、副标题、讲师信息
+- GPU算力困境：利用率数据、成本问题
+- 传统虚拟化方案对比表：Passthrough/vGPU/MIG/LD_PRELOAD
+- eBPF方案优势：透明性、安全性、高性能
+- [配图：虚拟化架构层次图]
+
+第二部分：eBPF技术原理（6页）
+- eBPF架构总览 [配图：eBPF内部架构图]
+- 验证器与JIT编译
+- BPF Map数据结构
+- Uprobe机制详解
+- Hook流程示意 [配图：Uprobe Hook流程图]
+- 代码示例：基础eBPF程序
+
+第三部分：CUDA驱动模型（4页）
+- CUDA软件栈层次 [配图：CUDA架构图]
+- Runtime API vs Driver API
+- 关键API：cuMemAlloc、cuLaunchKernel
+- 为什么Hook Driver API
+
+第四部分：系统架构设计（8页）
+- 整体架构图 [配图：HAMi架构示意图]
+- 控制面组件：Scheduler、Webhook
+- 数据面组件：Device Plugin、eBPF Agent
+- 显存虚拟化实现
+- 算力虚拟化实现
+- 故障隔离机制
+- 拓扑感知调度 [配图：NVLink拓扑图]
+- eBPF代码示例：cuMemAlloc拦截
+
+第五部分：生产实践（5页）
+- Kubernetes部署步骤
+- Pod资源配置示例
+- 监控指标与Grafana面板
+- 性能评估数据
+- 常见问题排查
+
+第六部分：总结（2页）
+- 核心优势总结
+- 未来展望与Q&A`,
+
+  summary: `请生成关于"eBPF GPU虚拟化技术"的知识总结，要求如下：
+
+【结构要求】
 - 采用思维导图式的层级结构
 - 核心概念需要给出准确定义
 - 列出知识点之间的关联关系
 - 标注重点和易混淆点
-- 提供记忆口诀或助记方法
-- 末尾附上常考题型和解题思路`,
 
-  activity: `请设计教学活动方案，要求如下：
-- 活动时长：15-20分钟
-- 参与形式：小组协作（4-5人一组）
-- 明确活动目标和预期成果
-- 详细的活动步骤和时间分配
-- 所需道具/材料清单
-- 教师引导要点和注意事项
-- 学生成果评价标准`,
+【知识点覆盖】
+1. eBPF核心概念
+   - 定义：extended Berkeley Packet Filter
+   - 组件：验证器、JIT编译器、Map、Helper函数
+   - Uprobe：用户态函数探针
+   - 与传统方案对比
+
+2. CUDA架构
+   - Runtime API (libcudart.so)：高级封装
+   - Driver API (libcuda.so)：底层接口
+   - 关键API功能说明
+
+3. GPU虚拟化技术
+   - 显存虚拟化：配额检查、欺骗查询、地址映射
+   - 算力虚拟化：Token桶、时间片轮转
+   - 故障隔离：XID错误处理
+
+4. HAMi系统架构
+   - 控制面：Scheduler扩展、Webhook注入
+   - 数据面：Device Plugin、eBPF Agent
+   - 调度策略：Binpack、Spread、拓扑感知
+
+【记忆要点】
+- 关键数值：性能损耗约1-2%
+- 易混淆点：Runtime API vs Driver API
+- 核心优势：细粒度、硬隔离、零侵入、生态兼容`,
+
+  activity: `请设计关于"eBPF GPU虚拟化"的教学活动方案，要求如下：
+
+【活动基本信息】
+- 活动时长：30分钟
+- 参与形式：小组协作（3-4人一组）
+- 所需环境：每组一台配置好Kubernetes和GPU的实验机器
+
+【活动目标】
+1. 理解GPU资源碎片化问题
+2. 掌握HAMi部署和配置方法
+3. 验证GPU虚拟化效果
+
+【活动步骤】
+
+第一阶段：环境准备（5分钟）
+- 检查Kubernetes集群状态
+- 确认GPU节点标签
+- 验证NVIDIA驱动版本
+
+第二阶段：HAMi部署（10分钟）
+- 添加Helm仓库
+- 执行helm install命令
+- 检查Pod运行状态
+- 验证Device Plugin注册
+
+第三阶段：资源验证（10分钟）
+- 创建申请vGPU的测试Pod
+- 配置显存限制(nvidia.com/gpumem)
+- 配置算力限制(nvidia.com/gpucores)
+- 在容器内运行nvidia-smi验证
+- 运行简单CUDA程序测试限制效果
+
+第四阶段：结果讨论（5分钟）
+- 各组分享实验结果
+- 讨论遇到的问题
+- 对比物理卡与虚拟化后的差异
+
+【评价标准】
+- HAMi部署成功：40分
+- Pod正确申请vGPU资源：30分
+- 验证限制生效：20分
+- 问题分析与讨论：10分
+
+【注意事项】
+- 确保集群有足够的GPU资源
+- 提前准备好测试用的CUDA程序镜像
+- 准备常见错误的排查指南`,
 
   custom: `请按照您的需求自由创作，您可以描述：
 - 目标受众和教学场景
